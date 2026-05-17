@@ -95,6 +95,27 @@ public class ManualStartMenuController : MonoBehaviour
         EnterHomeMenu();
     }
 
+    private void Update()
+    {
+        if (!IsFrontendVisible)
+            return;
+
+        bool selectionMissingAtFrameStart = EventSystem.current == null || !IsValidFrontendSelection(EventSystem.current.currentSelectedGameObject);
+        bool confirmRequested = WasFrontendConfirmRequestedThisFrame();
+        bool cancelRequested = WasFrontendCancelRequestedThisFrame();
+
+        EnsureFrontendSelection();
+
+        if (cancelRequested && controlsPanel != null && controlsPanel.activeInHierarchy)
+        {
+            HideControls();
+            return;
+        }
+
+        if (confirmRequested && selectionMissingAtFrameStart)
+            InvokeSelectedFrontendButton();
+    }
+
     private void OnDestroy()
     {
         UnbindButtonListeners();
@@ -103,8 +124,10 @@ public class ManualStartMenuController : MonoBehaviour
     public void EnterHomeMenu()
     {
         ResolvePauseSettingsUi();
+        ResolveStartSelectionMenu();
         pauseSettingsUI?.SetFrontendBlocked(true);
         SetGameplayUiVisible(false);
+        startSelectionMenu?.PrepareForDeferredShow();
 
         if (startMenuRoot != null)
             startMenuRoot.SetActive(true);
@@ -164,7 +187,7 @@ public class ManualStartMenuController : MonoBehaviour
             startSelectionStartFocusClip,
             startSelectionTutorialFocusClip,
             startSelectionFocusVolume);
-        startSelectionMenu?.ReturnToStartSelectionMenu();
+        startSelectionMenu?.ResetAndShowMenu();
 
         if (gameplayUiRestoreRoutine != null)
             StopCoroutine(gameplayUiRestoreRoutine);
@@ -488,8 +511,117 @@ public class ManualStartMenuController : MonoBehaviour
         if (button == null || EventSystem.current == null)
             return;
 
+        EventSystem.current.firstSelectedGameObject = button.gameObject;
         EventSystem.current.SetSelectedGameObject(button.gameObject);
         button.Select();
+    }
+
+    private void EnsureFrontendSelection()
+    {
+        Button desiredButton = GetDesiredFrontendButton();
+        if (desiredButton == null)
+            return;
+
+        if (EventSystem.current == null)
+            return;
+
+        EventSystem.current.firstSelectedGameObject = desiredButton.gameObject;
+        if (IsValidFrontendSelection(EventSystem.current.currentSelectedGameObject))
+            return;
+
+        SelectButton(desiredButton);
+    }
+
+    private Button GetDesiredFrontendButton()
+    {
+        if (controlsPanel != null && controlsPanel.activeInHierarchy)
+            return closeControlsButton != null ? closeControlsButton : startButton;
+
+        if (startMenuRoot != null && startMenuRoot.activeInHierarchy)
+        {
+            if (startButton != null)
+                return startButton;
+
+            if (controlsButton != null)
+                return controlsButton;
+
+            return quitButton;
+        }
+
+        return null;
+    }
+
+    private bool IsValidFrontendSelection(GameObject selectedObject)
+    {
+        if (selectedObject == null || !selectedObject.activeInHierarchy)
+            return false;
+
+        if (controlsPanel != null && controlsPanel.activeInHierarchy)
+            return selectedObject == closeControlsButton?.gameObject;
+
+        if (startMenuRoot != null && startMenuRoot.activeInHierarchy)
+            return selectedObject == startButton?.gameObject ||
+                   selectedObject == controlsButton?.gameObject ||
+                   selectedObject == quitButton?.gameObject;
+
+        return false;
+    }
+
+    private void InvokeSelectedFrontendButton()
+    {
+        if (controlsPanel != null && controlsPanel.activeInHierarchy)
+        {
+            closeControlsButton?.onClick.Invoke();
+            return;
+        }
+
+        if (EventSystem.current == null)
+        {
+            startButton?.onClick.Invoke();
+            return;
+        }
+
+        GameObject selectedObject = EventSystem.current.currentSelectedGameObject;
+        if (selectedObject == controlsButton?.gameObject)
+        {
+            controlsButton.onClick.Invoke();
+            return;
+        }
+
+        if (selectedObject == quitButton?.gameObject)
+        {
+            quitButton.onClick.Invoke();
+            return;
+        }
+
+        startButton?.onClick.Invoke();
+    }
+
+    private static bool WasFrontendConfirmRequestedThisFrame()
+    {
+        bool keyboardRequested = Keyboard.current != null &&
+                                 (Keyboard.current.enterKey.wasPressedThisFrame ||
+                                  Keyboard.current.numpadEnterKey.wasPressedThisFrame ||
+                                  Keyboard.current.spaceKey.wasPressedThisFrame);
+
+        bool gamepadRequested = Gamepad.current != null &&
+                                (Gamepad.current.startButton.wasPressedThisFrame ||
+                                 Gamepad.current.buttonSouth.wasPressedThisFrame);
+
+        return keyboardRequested || gamepadRequested;
+    }
+
+    private static bool WasFrontendCancelRequestedThisFrame()
+    {
+        bool keyboardRequested = Keyboard.current != null &&
+                                 (Keyboard.current.escapeKey.wasPressedThisFrame ||
+                                  Keyboard.current.backspaceKey.wasPressedThisFrame);
+
+        bool gamepadRequested = Gamepad.current != null &&
+                                (Gamepad.current.buttonEast.wasPressedThisFrame ||
+                                 Gamepad.current.selectButton.wasPressedThisFrame);
+
+        return keyboardRequested || gamepadRequested;
     }
 
     private void ResolvePauseSettingsUi()

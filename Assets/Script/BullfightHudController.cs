@@ -888,7 +888,9 @@ public class BullfightHudController : MonoBehaviour
                 break;
             case BullfightGameFlow.PhaseTwoState.Tutorial:
                 titleText = "\u968e\u6bb5\u4e8c\uff1a\u523a\u64ca\u6559\u5b78";
-                subtitleText = "\u5148\u7a69\u5b9a\u6301\u528d\u5b8c\u6210\u6821\u6e96\uff0c\u6821\u6e96\u5f8c\u8981\u5728\u523a\u64ca\u6642\u6a5f\u5167\u5411\u524d\u523a\u51fa\u3002\u6210\u529f\u8207\u5426\u4ecd\u4ee5\u529b\u9053\u9580\u6abb\u8207 QTE \u5224\u5b9a\u70ba\u6e96\u3002";
+                subtitleText = string.IsNullOrWhiteSpace(gameFlow.CurrentPhaseTwoTutorialInstruction)
+                    ? "\u5148\u7a69\u5b9a\u6301\u528d\u5b8c\u6210\u6821\u6e96\uff0c\u6821\u6e96\u5f8c\u8981\u5728\u523a\u64ca\u6642\u6a5f\u5167\u5411\u524d\u523a\u51fa\u3002\u6210\u529f\u8207\u5426\u4ecd\u4ee5\u529b\u9053\u9580\u6abb\u8207 QTE \u5224\u5b9a\u70ba\u6e96\u3002"
+                    : gameFlow.CurrentPhaseTwoTutorialInstruction;
                 statusText = gameFlow.IsPhaseTwoTutorialAdvanceReady
                     ? "\u8b80\u5b8c\u5f8c\u6309\u78ba\u8a8d\u7e7c\u7e8c\u6821\u6e96"
                     : $"\u8acb\u5148\u8b80\u5b8c\u523a\u64ca\u6d41\u7a0b... {Mathf.CeilToInt(gameFlow.PhaseTwoTutorialSecondsRemaining)}s";
@@ -904,7 +906,9 @@ public class BullfightHudController : MonoBehaviour
                 break;
             case BullfightGameFlow.PhaseTwoState.Standoff:
                 titleText = "\u5c0d\u5cd9";
-                subtitleText = "\u6309 E \u6216\u624b\u628a\u523a\u64ca\u9375\uff0c\u6216\u529b\u9053\u8d85\u904e 35 \u6253\u7834\u5c0d\u5cd9";
+                subtitleText = string.IsNullOrWhiteSpace(gameFlow.CurrentPhaseTwoStandoffInstruction)
+                    ? "\u6309 E \u6216\u624b\u628a\u523a\u64ca\u9375\uff0c\u6216\u529b\u9053\u8d85\u904e 35 \u6253\u7834\u5c0d\u5cd9"
+                    : gameFlow.CurrentPhaseTwoStandoffInstruction;
                 statusText = $"\u5012\u6578 {Mathf.CeilToInt(gameFlow.PhaseTwoMercyTimeRemaining)}s";
                 break;
             case BullfightGameFlow.PhaseTwoState.RoundPrepare:

@@ -42,3 +42,7 @@ Assets/RPG MEDIEVAL PROPS/HD RENDER PIPELINE/
 Assets/RPG MEDIEVAL PROPS/HD RENDER PIPELINE.meta
 Assets/RPG MEDIEVAL PROPS/UNIVERSAL RENDER PIPELINE/
 Assets/RPG MEDIEVAL PROPS/UNIVERSAL RENDER PIPELINE.meta
+
+# Local backup project copies and accidental terminal dumps
+Spain bullfight/
+e --abortgit rebase --abortgit rebase --abort

@@ -53,6 +53,7 @@ public class BullfightStartMenu : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float pressRumbleLowFrequency = 0.35f;
     [SerializeField, Range(0f, 1f)] private float pressRumbleHighFrequency = 0.65f;
     [SerializeField] private float pressRumbleDuration = 0.12f;
+    [SerializeField] private float confirmSuppressionDuration = 0.15f;
 
     private Canvas canvas;
     private GameObject root;
@@ -65,6 +66,7 @@ public class BullfightStartMenu : MonoBehaviour
     private GameObject lastSelectedObject;
     private bool started;
     private Coroutine pressRumbleRoutine;
+    private float suppressConfirmUntilUnscaledTime = -1f;
 
     public bool IsMenuVisible => canvas != null && canvas.gameObject.activeSelf;
 
@@ -83,6 +85,12 @@ public class BullfightStartMenu : MonoBehaviour
 
     private void Start()
     {
+        if (FindObjectOfType<ManualStartMenuController>(true) != null)
+        {
+            PrepareForDeferredShow();
+            return;
+        }
+
         BuildMenu();
         ShowMenu();
     }
@@ -94,6 +102,9 @@ public class BullfightStartMenu : MonoBehaviour
 
         EnsureButtonSelected();
         UpdateSelectionAudio();
+
+        if (Time.unscaledTime < suppressConfirmUntilUnscaledTime)
+            return;
 
         if (!WasConfirmRequestedThisFrame() || EventSystem.current == null)
             return;
@@ -151,7 +162,7 @@ public class BullfightStartMenu : MonoBehaviour
 
     public void ReturnToStartSelectionMenu()
     {
-        ReturnToMenu();
+        ResetAndShowMenu();
     }
 
     public void ConfigureSelectionAudio(AudioClip startClip, AudioClip tutorialClip, float volume)
@@ -163,12 +174,34 @@ public class BullfightStartMenu : MonoBehaviour
 
     public void ReturnToMenu()
     {
+        ResetAndShowMenu();
+    }
+
+    public void ResetAndShowMenu()
+    {
         BuildMenu();
 
         if (canvas != null)
             canvas.gameObject.SetActive(true);
 
         ShowMenu();
+    }
+
+    public void PrepareForDeferredShow()
+    {
+        BuildMenu();
+        started = false;
+        lastSelectedObject = null;
+        suppressConfirmUntilUnscaledTime = Time.unscaledTime + Mathf.Max(0.05f, confirmSuppressionDuration);
+
+        if (root != null)
+            root.SetActive(true);
+
+        if (canvas != null)
+            canvas.gameObject.SetActive(false);
+
+        if (EventSystem.current != null)
+            EventSystem.current.SetSelectedGameObject(null);
     }
 
     private void HideMenu()
@@ -184,7 +217,35 @@ public class BullfightStartMenu : MonoBehaviour
 
     private void BuildMenu()
     {
-        if (root != null)
+        if (canvas == null)
+        {
+            Transform existingCanvas = transform.Find("BullfightStartMenuCanvas");
+            if (existingCanvas != null)
+                canvas = existingCanvas.GetComponent<Canvas>();
+        }
+
+        if (canvas != null && root == null)
+        {
+            Transform existingRoot = canvas.transform.Find("MenuPanel");
+            if (existingRoot != null)
+                root = existingRoot.gameObject;
+        }
+
+        if (root != null && startButton == null)
+        {
+            Transform existingStartButton = root.transform.Find("StartButton");
+            if (existingStartButton != null)
+                startButton = existingStartButton.GetComponent<Button>();
+        }
+
+        if (root != null && tutorialButton == null)
+        {
+            Transform existingTutorialButton = root.transform.Find("TutorialButton");
+            if (existingTutorialButton != null)
+                tutorialButton = existingTutorialButton.GetComponent<Button>();
+        }
+
+        if (canvas != null && root != null && startButton != null && tutorialButton != null)
             return;
 
         GameObject canvasObject = new GameObject("BullfightStartMenuCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -244,6 +305,7 @@ public class BullfightStartMenu : MonoBehaviour
     {
         started = false;
         lastSelectedObject = null;
+        suppressConfirmUntilUnscaledTime = Time.unscaledTime + Mathf.Max(0.05f, confirmSuppressionDuration);
 
         ManualStartMenuController manualMenu = FindObjectOfType<ManualStartMenuController>(true);
         manualMenu?.SetGameplayUiVisibleForGameplay(false);
@@ -255,8 +317,14 @@ public class BullfightStartMenu : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
+        if (canvas != null)
+            canvas.gameObject.SetActive(true);
+
         if (root != null)
             root.SetActive(true);
+
+        if (EventSystem.current != null)
+            EventSystem.current.SetSelectedGameObject(null);
 
         EnsureButtonSelected();
     }

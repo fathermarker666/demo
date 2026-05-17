@@ -47,7 +47,9 @@ public class BullfightPlayerController : MonoBehaviour
     private FieldInfo axisMovementField;
     private FieldInfo holdingButtonRunField;
     private BullfightGameFlow gameFlow;
+    private ArduinoTest arduinoTest;
     private InputActionAsset runtimeBullfightActions;
+    private InputAction holdAction;
     private InputAction swingAction;
     private InputAction attackAction;
     private InputAction dashAction;
@@ -62,10 +64,11 @@ public class BullfightPlayerController : MonoBehaviour
     private bool sensorPhaseTwoStabLatched;
     
     private bool ultrasonicHoldActive;
+    private float nextReferenceResolveAt = -1f;
 
     private void Awake()
     {
-        ResolveReferencesIfNeeded();
+        ResolveReferencesIfNeeded(true);
         RefreshBullfightActions();
     }
 
@@ -235,6 +238,26 @@ public class BullfightPlayerController : MonoBehaviour
         sensorPhaseTwoWeakStabFrame = -1;
     }
 
+    public void ResetSensorDrivenInputs(bool clearUltrasonicHold = true)
+    {
+        sensorSwingFrame = -1;
+        sensorPhaseTwoStabFrame = -1;
+        sensorPhaseTwoWeakStabFrame = -1;
+        sensorPhaseTwoCalibrationHeld = false;
+        sensorPhaseTwoCalibrationReady = false;
+        sensorPhaseTwoAttemptActive = false;
+        sensorPhaseTwoStabLatched = false;
+        sensorPhaseTwoForce = 0f;
+        sensorPhaseTwoCalibrationForce = 0f;
+        sensorPhaseTwoPeakForce = 0f;
+        sensorPhaseTwoForceUpdatedAt = -999f;
+        phaseTwoStabBufferedUntil = -1f;
+        phaseTwoWeakStabBufferedUntil = -1f;
+
+        if (clearUltrasonicHold)
+            ultrasonicHoldActive = false;
+    }
+
     public void ConfigureInputActions(InputActionAsset asset)
     {
         bullfightActionsAsset = asset;
@@ -283,17 +306,7 @@ public class BullfightPlayerController : MonoBehaviour
 
     public void ResetPhaseTwoSensorState()
     {
-        sensorPhaseTwoForce = 0f;
-        sensorPhaseTwoCalibrationForce = 0f;
-        sensorPhaseTwoPeakForce = 0f;
-        sensorPhaseTwoForceUpdatedAt = -999f;
-        sensorPhaseTwoCalibrationReady = false;
-        sensorPhaseTwoAttemptActive = false;
-        sensorPhaseTwoStabLatched = false;
-        sensorPhaseTwoStabFrame = -1;
-        sensorPhaseTwoWeakStabFrame = -1;
-        phaseTwoStabBufferedUntil = -1f;
-        phaseTwoWeakStabBufferedUntil = -1f;
+        ResetSensorDrivenInputs(clearUltrasonicHold: false);
     }
 
     public void SetPhaseTwoSensorReading(float calibrationSignal, float force)
@@ -382,22 +395,57 @@ public class BullfightPlayerController : MonoBehaviour
     public bool WasTutorialAdvancePressedThisFrame()
     {
         return WasAttackPressedThisFrame() ||
+               (Keyboard.current != null &&
+                (Keyboard.current.enterKey.wasPressedThisFrame ||
+                 Keyboard.current.numpadEnterKey.wasPressedThisFrame ||
+                 Keyboard.current.spaceKey.wasPressedThisFrame)) ||
                (Gamepad.current != null &&
                 (Gamepad.current.startButton.wasPressedThisFrame ||
                  Gamepad.current.buttonSouth.wasPressedThisFrame));
     }
 
-    public string GetMoveDisplayLabel() => "\u5de6\u6416\u687f";
+    public bool IsSensorInputActive() =>
+        arduinoTest != null && arduinoTest.ConnectionState == ArduinoTest.SensorConnectionState.Active;
 
-    public string GetLookDisplayLabel() => "\u53f3\u6416\u687f";
+    public string GetMoveDisplayLabel() => "WASD";
 
-    public string GetHoldDisplayLabel() => "ZL + ZR";
+    public string GetLookDisplayLabel() => "\u6ed1\u9f20";
 
-    public string GetSwingDisplayLabel() => GetReadableGamepadBindingLabel(swingAction, "X");
+    public string GetHoldDisplayLabel()
+    {
+        string keyboardLabel = GetReadableKeyboardBindingLabel(holdAction, holdClothKey);
+        return IsSensorInputActive()
+            ? $"\u8d85\u97f3\u6ce2\u6301\u5e03 / {keyboardLabel} \u5099\u63f4"
+            : keyboardLabel;
+    }
 
-    public string GetDashDisplayLabel() => GetReadableGamepadBindingLabel(dashAction, "Y");
+    public string GetSwingDisplayLabel()
+    {
+        string keyboardLabel = GetReadableKeyboardBindingLabel(swingAction, capaKey);
+        return IsSensorInputActive()
+            ? $"\u611f\u6e2c\u5668\u63ee\u5e03 / {keyboardLabel} \u5099\u63f4"
+            : keyboardLabel;
+    }
 
-    public string GetAttackDisplayLabel() => GetReadableGamepadBindingLabel(attackAction, "B");
+    public string GetDashDisplayLabel() => GetReadableKeyboardBindingLabel(dashAction, evadeKey);
+
+    public string GetAttackDisplayLabel() => GetReadableKeyboardBindingLabel(attackAction, attackKey);
+
+    public string GetPhaseTwoCalibrationDisplayLabel()
+    {
+        string keyboardLabel = GetReadableKeyboardBindingLabel(phaseTwoCalibrationAction, phaseTwoCalibrationKey);
+        return IsSensorInputActive()
+            ? $"\u786c\u9ad4\u6301\u528d\u6821\u6e96 / {keyboardLabel} \u5099\u63f4"
+            : keyboardLabel;
+    }
+
+    public string GetPhaseTwoStabDisplayLabel()
+    {
+        string keyboardLabel = GetReadableKeyboardBindingLabel(phaseTwoStabAction, phaseTwoStabKey);
+        return IsSensorInputActive()
+            ? $"\u786c\u9ad4\u523a\u64ca / {keyboardLabel} \u5099\u63f4"
+            : keyboardLabel;
+    }
 
     private void UpdateHoldingCloth()
     {
@@ -439,7 +487,7 @@ public class BullfightPlayerController : MonoBehaviour
 
     private bool IsHoldPressed()
     {
-        return AreHoldTriggersPressed() || ultrasonicHoldActive;
+        return AreHoldTriggersPressed() || IsActionPressed(holdAction) || Input.GetKey(holdClothKey) || ultrasonicHoldActive;
     }
 
     private bool WasSwingPressedThisFrame()
@@ -489,11 +537,16 @@ public class BullfightPlayerController : MonoBehaviour
 
     private bool HasMissingReferences()
     {
-        return playerStats == null || shooterCharacter == null || axisMovementField == null || holdingButtonRunField == null || gameFlow == null;
+        return playerStats == null || shooterCharacter == null || axisMovementField == null || holdingButtonRunField == null || gameFlow == null || arduinoTest == null;
     }
 
-    private void ResolveReferencesIfNeeded()
+    private void ResolveReferencesIfNeeded(bool force = false)
     {
+        if (!force && Time.unscaledTime < nextReferenceResolveAt)
+            return;
+
+        nextReferenceResolveAt = Time.unscaledTime + 0.5f;
+
         if (playerStats == null)
             playerStats = BullfightSceneCache.GetLocalOrScene<PlayerStats>(this);
 
@@ -511,6 +564,9 @@ public class BullfightPlayerController : MonoBehaviour
 
         if (gameFlow == null)
             gameFlow = BullfightSceneCache.FindObject<BullfightGameFlow>();
+
+        if (arduinoTest == null)
+            arduinoTest = BullfightSceneCache.FindObject<ArduinoTest>();
     }
 
     private void RefreshBullfightActions()
@@ -530,6 +586,7 @@ public class BullfightPlayerController : MonoBehaviour
         runtimeBullfightActions = Instantiate(bullfightActionsAsset);
         runtimeBullfightActions.Enable();
 
+        holdAction = runtimeBullfightActions.FindAction("player/hold");
         swingAction = runtimeBullfightActions.FindAction("player/swing");
         attackAction = runtimeBullfightActions.FindAction("player/attack");
         dashAction = runtimeBullfightActions.FindAction("player/dash");
@@ -600,6 +657,65 @@ public class BullfightPlayerController : MonoBehaviour
         }
 
         return fallback;
+    }
+
+    private static string GetReadableKeyboardBindingLabel(InputAction action, KeyCode fallbackKey)
+    {
+        if (action != null)
+        {
+            for (int index = 0; index < action.bindings.Count; index++)
+            {
+                InputBinding binding = action.bindings[index];
+                if (binding.isComposite || binding.isPartOfComposite || string.IsNullOrWhiteSpace(binding.path))
+                    continue;
+
+                if (!binding.path.Contains("<Keyboard>"))
+                    continue;
+
+                return GetReadableKeyboardPath(binding.path);
+            }
+        }
+
+        return GetReadableKeyCodeLabel(fallbackKey);
+    }
+
+    private static string GetReadableKeyboardPath(string bindingPath)
+    {
+        if (string.IsNullOrWhiteSpace(bindingPath))
+            return string.Empty;
+
+        int slashIndex = bindingPath.LastIndexOf('/');
+        string keyName = slashIndex >= 0 ? bindingPath.Substring(slashIndex + 1) : bindingPath;
+        return keyName switch
+        {
+            "space" => "Space",
+            "ctrl" => "LeftCtrl",
+            "leftCtrl" => "LeftCtrl",
+            "rightCtrl" => "RightCtrl",
+            "leftShift" => "LeftShift",
+            "rightShift" => "RightShift",
+            "enter" => "Enter",
+            "numpadEnter" => "NumpadEnter",
+            "escape" => "Esc",
+            _ when keyName.Length == 1 => keyName.ToUpperInvariant(),
+            _ => keyName
+        };
+    }
+
+    private static string GetReadableKeyCodeLabel(KeyCode keyCode)
+    {
+        return keyCode switch
+        {
+            KeyCode.Space => "Space",
+            KeyCode.LeftControl => "LeftCtrl",
+            KeyCode.RightControl => "RightCtrl",
+            KeyCode.LeftShift => "LeftShift",
+            KeyCode.RightShift => "RightShift",
+            KeyCode.Return => "Enter",
+            KeyCode.KeypadEnter => "NumpadEnter",
+            KeyCode.Escape => "Esc",
+            _ => keyCode.ToString()
+        };
     }
 }
 

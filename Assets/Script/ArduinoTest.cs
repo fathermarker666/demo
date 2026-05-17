@@ -6,6 +6,13 @@ using UnityEngine;
 
 public class ArduinoTest : MonoBehaviour
 {
+    public enum SensorConnectionState
+    {
+        Disconnected,
+        PortOpenNoSignal,
+        Active
+    }
+
     [SerializeField] string portName = "COM6";
     [SerializeField] int baudRate = 115200;
     [SerializeField] float initialOpenDelay = 0.5f;
@@ -29,25 +36,31 @@ public class ArduinoTest : MonoBehaviour
     string pendingSerialData = string.Empty;
     string lastSensorMessage = string.Empty;
     string lastOpenError = string.Empty;
+    float nextPlayerResolveAt = -1f;
+    string lastOpenFailureWarningMessage = string.Empty;
+    SensorConnectionState connectionState = SensorConnectionState.Disconnected;
+
+    public event Action<SensorConnectionState> OnConnectionStateChanged;
 
     public bool IsPortOpen => sp != null && sp.IsOpen;
-    public bool IsSensorConnected => IsPortOpen && (Time.unscaledTime - lastSensorMessageAt) <= Mathf.Max(0.2f, sensorSignalTimeout);
+    public bool IsSensorConnected => connectionState == SensorConnectionState.Active;
     public bool HasRecentForcePacket => Time.unscaledTime - lastParsedForceAt <= Mathf.Max(0.2f, sensorSignalTimeout);
     public string LastSensorMessage => lastSensorMessage;
     public float LastUltrasonicDistanceCm => lastUltrasonicDistanceCm;
     public bool IsUltrasonicHoldingCloth => isUltrasonicHoldingCloth;
+    public SensorConnectionState ConnectionState => connectionState;
     public string CurrentConnectionStatus
     {
         get
         {
-            if (IsSensorConnected)
+            if (connectionState == SensorConnectionState.Active)
                 return string.Empty;
 
             if (!string.IsNullOrWhiteSpace(lastOpenError))
                 return $"[未連接到感測器] {portName} 開啟失敗";
 
-            if (IsPortOpen)
-                return $"[未連接到感測器] {portName} 已開啟但未收到資料";
+            if (connectionState == SensorConnectionState.PortOpenNoSignal)
+                return $"[未連接到感測器] {portName} 已開啟，等待資料中";
 
             return $"[未連接到感測器] 請確認 {portName}";
         }
@@ -76,6 +89,7 @@ public class ArduinoTest : MonoBehaviour
         lastUltrasonicMessageAt = -999f;
         pendingSerialData = string.Empty;
         lastSensorMessage = string.Empty;
+        ResolvePlayerControllerIfNeeded(force: true);
         playerController?.SetPhaseTwoSensorCalibrationReady(false);
 
         sp = new SerialPort(portName, baudRate)
@@ -88,23 +102,28 @@ public class ArduinoTest : MonoBehaviour
         {
             sp.Open();
             lastOpenError = string.Empty;
+            lastOpenFailureWarningMessage = string.Empty;
+            SetConnectionState(SensorConnectionState.PortOpenNoSignal);
             Debug.Log($"Serial port {portName} opened.");
         }
         catch (Exception e)
         {
             lastOpenError = e.Message;
-            Debug.LogError("Open failed: " + e.Message);
+            LogOpenFailureWarning("Open failed: " + e.Message);
             ClosePort();
+
+            if (!isQuitting && isActiveAndEnabled && reopenCoroutine == null)
+                reopenCoroutine = StartCoroutine(OpenPortAfterDelay(reopenDelay));
         }
     }
 
     void Update()
     {
-        if (playerController == null)
-            playerController = FindObjectOfType<BullfightPlayerController>(true);
+        ResolvePlayerControllerIfNeeded();
 
         if (sp == null || !sp.IsOpen)
         {
+            SetConnectionState(SensorConnectionState.Disconnected);
             UpdateUltrasonicHoldTimeout();
             return;
         }
@@ -145,13 +164,16 @@ public class ArduinoTest : MonoBehaviour
                 reopenCoroutine = StartCoroutine(OpenPortAfterDelay(reopenDelay));
         }
 
+        if (Time.unscaledTime - lastSensorMessageAt > Mathf.Max(0.2f, sensorSignalTimeout))
+            SetConnectionState(SensorConnectionState.PortOpenNoSignal);
+
         UpdateUltrasonicHoldTimeout();
     }
 
     void OnDisable()
     {
         playerController?.SetPhaseTwoCalibrationSensorHeld(false);
-        playerController?.ResetPhaseTwoSensorState();
+        playerController?.ResetSensorDrivenInputs();
         ClosePort();
     }
 
@@ -164,14 +186,13 @@ public class ArduinoTest : MonoBehaviour
     {
         isQuitting = true;
         playerController?.SetPhaseTwoCalibrationSensorHeld(false);
-        playerController?.ResetPhaseTwoSensorState();
+        playerController?.ResetSensorDrivenInputs();
         ClosePort();
     }
 
     public void BeginPhaseTwoCalibration()
     {
-        if (playerController == null)
-            playerController = FindObjectOfType<BullfightPlayerController>(true);
+        ResolvePlayerControllerIfNeeded(force: true);
 
         if (sp == null || !sp.IsOpen)
             OpenPort();
@@ -188,6 +209,7 @@ public class ArduinoTest : MonoBehaviour
 
         lastSensorMessageAt = Time.unscaledTime;
         lastSensorMessage = data.Trim();
+        SetConnectionState(SensorConnectionState.Active);
 
         if (TryHandleUltrasonicDistanceMessage(data))
             return;
@@ -375,6 +397,56 @@ public class ArduinoTest : MonoBehaviour
         playerController?.SetUltrasonicHoldActive(false);
     }
 
+    void ResolvePlayerControllerIfNeeded(bool force = false)
+    {
+        if (playerController != null)
+            return;
+
+        if (!force && Time.unscaledTime < nextPlayerResolveAt)
+            return;
+
+        nextPlayerResolveAt = Time.unscaledTime + 0.5f;
+        playerController = FindObjectOfType<BullfightPlayerController>(true);
+    }
+
+    void LogOpenFailureWarning(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        if (message == lastOpenFailureWarningMessage)
+            return;
+
+        lastOpenFailureWarningMessage = message;
+        Debug.LogWarning(message);
+    }
+
+    void SetConnectionState(SensorConnectionState newState)
+    {
+        if (connectionState == newState)
+            return;
+
+        SensorConnectionState previousState = connectionState;
+        connectionState = newState;
+
+        if (previousState == SensorConnectionState.Active && newState != SensorConnectionState.Active)
+            ClearSensorDrivenInputState();
+
+        OnConnectionStateChanged?.Invoke(connectionState);
+    }
+
+    void ClearSensorDrivenInputState()
+    {
+        if (isUltrasonicHoldingCloth)
+        {
+            isUltrasonicHoldingCloth = false;
+            playerController?.SetUltrasonicHoldActive(false);
+        }
+
+        playerController?.SetPhaseTwoCalibrationSensorHeld(false);
+        playerController?.ResetSensorDrivenInputs(clearUltrasonicHold: false);
+    }
+
     void ClosePort()
     {
         if (reopenCoroutine != null)
@@ -384,7 +456,10 @@ public class ArduinoTest : MonoBehaviour
         }
 
         if (sp == null)
+        {
+            SetConnectionState(SensorConnectionState.Disconnected);
             return;
+        }
 
         try
         {
@@ -399,6 +474,7 @@ public class ArduinoTest : MonoBehaviour
         {
             sp.Dispose();
             sp = null;
+            SetConnectionState(SensorConnectionState.Disconnected);
             lastSensorMessageAt = -999f;
             lastParsedForceAt = -999f;
             pendingSerialData = string.Empty;

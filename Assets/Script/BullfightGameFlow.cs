@@ -250,6 +250,7 @@ public class BullfightGameFlow : MonoBehaviour
     public float calibrationHoldDuration = 5f;
     public float calibrationAnchorDuration = 1f;
     public float calibrationDecayMultiplier = 1.35f;
+    public float calibrationSensorGraceDuration = 1.5f;
     public float roundStanceConfirmDuration = 0.7f;
     public float roundPrepareDuration = 0.55f;
     public float roundWindowDuration = 1.35f;
@@ -307,7 +308,7 @@ public class BullfightGameFlow : MonoBehaviour
     public float phaseOneGroundingSnapDuration = 1.2f;
 
     [Header("Debug Shortcuts")]
-    public bool enableDebugShortcuts = true;
+    public bool enableDebugShortcuts = false;
     public KeyCode debugRefillStaminaKey = KeyCode.Alpha7;
     public KeyCode debugPhaseTwoKey = KeyCode.Alpha8;
     public KeyCode debugKillBullKey = KeyCode.Alpha9;
@@ -349,6 +350,8 @@ public class BullfightGameFlow : MonoBehaviour
     public string CurrentPhaseTwoReflectionLine => GetPhaseTwoReflectionLine();
     public string CurrentPhaseTwoCalibrationLine => GetPhaseTwoCalibrationLine();
     public string CurrentPhaseTwoCalibrationStatus => GetPhaseTwoCalibrationStatus();
+    public string CurrentPhaseTwoTutorialInstruction => GetPhaseTwoTutorialInstruction();
+    public string CurrentPhaseTwoStandoffInstruction => GetPhaseTwoStandoffInstruction();
     public bool IsPhaseTwoTutorialAdvanceReady => currentPhase == GamePhase.PhaseTwo &&
                                                   phaseTwoState == PhaseTwoState.Tutorial &&
                                                   phaseTwoStateElapsed >= phaseTwoTutorialMinReadDuration;
@@ -377,6 +380,7 @@ public class BullfightGameFlow : MonoBehaviour
     private bool isEnteringPhaseTwo;
     private float phaseTwoStateElapsed;
     private float calibrationHoldTimer;
+    private float calibrationSignalWaitTimer;
     private float calibrationAnchorTimer;
     private float calibrationAnchorValue;
     private float activeRoundWindowDuration;
@@ -397,6 +401,7 @@ public class BullfightGameFlow : MonoBehaviour
     private int tutorialDashSuccessCount;
     private int tutorialAttackSuccessCount;
     private bool phaseTwoCalibrated;
+    private bool phaseTwoCalibrationUsingSensor;
     private bool phaseTwoCalibrationAnchorLocked;
     private bool phaseTwoHasCommittedAttack;
     private bool nextRoundHasPerfectAdvantage;
@@ -971,8 +976,8 @@ public class BullfightGameFlow : MonoBehaviour
             TutorialState.Intro => $"\u5148\u8a8d\u8b58\u57fa\u790e\u64cd\u4f5c\uff1a{GetMoveLabel()} \u79fb\u52d5\uff0c{GetLookLabel()} \u8f49\u8996\u89d2\uff0c{GetHoldLabel()} \u6301\u5e03\uff0c{GetSwingLabel()} \u63ee\u5e03\uff0c{GetDashLabel()} \u9583\u907f\uff0c{GetAttackLabel()} \u653b\u64ca\u3002",
             TutorialState.Move => $"\u8acb\u4f7f\u7528 {GetMoveLabel()} \u79fb\u52d5\u9b25\u725b\u58eb\u3002",
             TutorialState.Look => $"\u8acb\u4f7f\u7528 {GetLookLabel()} \u89c0\u5bdf\u9b25\u725b\u5834\u8207\u725b\u7684\u4f4d\u7f6e\u3002",
-            TutorialState.HoldCloth => "\u628a\u624b\u9760\u8fd1\u8d85\u97f3\u6ce2\u611f\u6e2c\u5668\u8209\u8d77\u7d05\u5e03\uff0c\u96e2\u958b\u5f8c\u6703\u653e\u4e0b\uff0c\u9023\u7e8c\u5b8c\u6210 3 \u6b21\u3002",
-            TutorialState.Capa => $"\u5148\u628a\u624b\u9760\u8fd1\u8d85\u97f3\u6ce2\u611f\u6e2c\u5668\u9032\u5165\u6301\u5e03\uff0c\u518d\u5728 QTE \u74b0\u7e2e\u8fd1\u6642\u6309 {GetSwingLabel()} \uff0c\u4e26\u62ff\u5230 Perfect\u3002",
+            TutorialState.HoldCloth => $"\u4f7f\u7528 {GetHoldLabel()} \u9032\u5165\u6301\u5e03\uff0c\u96e2\u958b\u5f8c\u6703\u653e\u4e0b\uff0c\u9023\u7e8c\u5b8c\u6210 3 \u6b21\u3002",
+            TutorialState.Capa => $"\u5148\u4f7f\u7528 {GetHoldLabel()} \u9032\u5165\u6301\u5e03\uff0c\u518d\u5728 QTE \u74b0\u7e2e\u8fd1\u6642\u6309 {GetSwingLabel()} \uff0c\u4e26\u62ff\u5230 Perfect\u3002",
             TutorialState.Dash => $"\u7576\u725b\u76f4\u885d\u904e\u4f86\u6642\uff0c\u6309 {GetDashLabel()} \u9023\u7e8c\u5b8c\u6210 3 \u6b21\u6210\u529f\u9583\u907f\u3002",
             TutorialState.Attack => $"\u9760\u8fd1\u725b\u5f8c\u6309 {GetAttackLabel()} \u9032\u884c\u653b\u64ca\uff0c\u9023\u7e8c\u5b8c\u6210 3 \u6b21\u6709\u6548\u547d\u4e2d\u3002",
             TutorialState.Rules => $"\u8acb\u8b80\u5b8c\u4e0b\u65b9\u898f\u5247\uff0c\u4e4b\u5f8c\u6309 {GetAttackLabel()} \u7e7c\u7e8c\u3002",
@@ -1123,25 +1128,55 @@ public class BullfightGameFlow : MonoBehaviour
 
     private void UpdateCalibration()
     {
-        bool sensorConnected = arduinoTest != null && arduinoTest.IsSensorConnected;
+        ArduinoTest.SensorConnectionState sensorState = arduinoTest != null
+            ? arduinoTest.ConnectionState
+            : ArduinoTest.SensorConnectionState.Disconnected;
+        bool sensorConnected = sensorState == ArduinoTest.SensorConnectionState.Active;
+        bool sensorWaitingForSignal = sensorState == ArduinoTest.SensorConnectionState.PortOpenNoSignal;
         bool hasRecentForceReading = sensorConnected &&
                                      arduinoTest != null &&
                                      arduinoTest.HasRecentForcePacket &&
                                      playerController != null &&
                                      playerController.HasRecentPhaseTwoSensorReading();
+        bool shouldUseSensorCalibration = sensorConnected && hasRecentForceReading;
+
+        if (shouldUseSensorCalibration)
+        {
+            calibrationSignalWaitTimer = 0f;
+            if (!phaseTwoCalibrationUsingSensor)
+            {
+                phaseTwoCalibrationUsingSensor = true;
+                calibrationHoldTimer = 0f;
+                ResetPhaseTwoCalibrationAnchor();
+            }
+        }
+        else
+        {
+            calibrationSignalWaitTimer += Time.unscaledDeltaTime;
+            if (phaseTwoCalibrationUsingSensor)
+            {
+                phaseTwoCalibrationUsingSensor = false;
+                calibrationHoldTimer = 0f;
+                ResetPhaseTwoCalibrationAnchor();
+            }
+        }
+
         int progressPercent = Mathf.RoundToInt(PhaseTwoCalibrationProgress * 100f);
         float stableThreshold = playerController != null ? playerController.PhaseTwoCalibrationStableThreshold : 2f;
         float anchorDuration = Mathf.Max(0.1f, calibrationAnchorDuration);
+        float waitDuration = Mathf.Max(0f, calibrationSensorGraceDuration);
+        bool shouldHoldForSensor = sensorWaitingForSignal && calibrationSignalWaitTimer < waitDuration;
 
-        if (sensorConnected && !hasRecentForceReading)
+        if (shouldHoldForSensor)
         {
             ResetPhaseTwoCalibrationAnchor();
             calibrationHoldTimer = 0f;
-            phaseTwoCalibrationStatusText = $"\u7b49\u5f85\u611f\u6e2c\u5668\u8cc7\u6599... 0%\n{GetPhaseTwoSensorDebugLine()}";
+            int waitPercent = waitDuration <= 0.01f ? 100 : Mathf.RoundToInt(Mathf.Clamp01(calibrationSignalWaitTimer / waitDuration) * 100f);
+            phaseTwoCalibrationStatusText = $"\u6e96\u5099\u6821\u6e96 {waitPercent}%";
             return;
         }
 
-        if (sensorConnected && hasRecentForceReading && playerController != null)
+        if (shouldUseSensorCalibration && playerController != null)
         {
             float currentForce = playerController.GetPhaseTwoSensorForce();
             float calibrationForce = playerController.GetPhaseTwoSensorCalibrationForce();
@@ -1155,7 +1190,7 @@ public class BullfightGameFlow : MonoBehaviour
                     calibrationAnchorValue = calibrationForce;
                     calibrationAnchorTimer = 0f;
                     calibrationHoldTimer = 0f;
-                    phaseTwoCalibrationStatusText = $"\u6821\u6e96\u8d77\u9ede\u504f\u79fb\uff0c\u91cd\u65b0\u7a69\u5b9a\u4e2d 0%\n\u76ee\u524d\u4f4d\u7f6e {calibrationForce:F1}   \u5bb9\u8a31 \u00b1{stableThreshold:F0}\n{GetPhaseTwoSensorDebugLine()}";
+                    phaseTwoCalibrationStatusText = $"\u6821\u6e96\u8d77\u9ede\u504f\u79fb\uff0c\u91cd\u65b0\u7a69\u5b9a\u4e2d 0%\n\u76ee\u524d\u4f4d\u7f6e {calibrationForce:F1}   \u5bb9\u8a31 \u00b1{stableThreshold:F0}";
                     return;
                 }
 
@@ -1168,11 +1203,11 @@ public class BullfightGameFlow : MonoBehaviour
                 {
                     phaseTwoCalibrationAnchorLocked = true;
                     calibrationAnchorValue = calibrationForce;
-                    phaseTwoCalibrationStatusText = $"\u6821\u6e96\u57fa\u6e96\u5df2\u9396\u5b9a {progressPercent}%\n\u57fa\u6e96\u503c {calibrationAnchorValue:F1}   \u7576\u524d\u529b\u9053 {currentForce:F1}\n{GetPhaseTwoSensorDebugLine()}";
+                    phaseTwoCalibrationStatusText = $"\u6821\u6e96\u57fa\u6e96\u5df2\u9396\u5b9a {progressPercent}%\n\u57fa\u6e96\u503c {calibrationAnchorValue:F1}   \u7576\u524d\u529b\u9053 {currentForce:F1}";
                 }
                 else
                 {
-                    phaseTwoCalibrationStatusText = $"\u5efa\u7acb\u6821\u6e96\u57fa\u6e96 {anchorPercent}%\n\u76ee\u524d\u4f4d\u7f6e {calibrationForce:F1}   \u5bb9\u8a31 \u00b1{stableThreshold:F0}\n{GetPhaseTwoSensorDebugLine()}";
+                    phaseTwoCalibrationStatusText = $"\u5efa\u7acb\u6821\u6e96\u57fa\u6e96 {anchorPercent}%\n\u76ee\u524d\u4f4d\u7f6e {calibrationForce:F1}   \u5bb9\u8a31 \u00b1{stableThreshold:F0}";
                 }
             }
             else
@@ -1184,13 +1219,13 @@ public class BullfightGameFlow : MonoBehaviour
                     calibrationAnchorTimer = 0f;
                     calibrationHoldTimer = 0f;
                     phaseTwoCalibrationAnchorLocked = false;
-                    phaseTwoCalibrationStatusText = $"\u504f\u79fb\u904e\u5927\uff0c\u91cd\u65b0\u6821\u6e96 0%\n\u504f\u79fb {deviation:F1} / \u5bb9\u8a31 \u00b1{stableThreshold:F0}   \u7576\u524d\u529b\u9053 {currentForce:F1}\n{GetPhaseTwoSensorDebugLine()}";
+                    phaseTwoCalibrationStatusText = $"\u504f\u79fb\u904e\u5927\uff0c\u91cd\u65b0\u6821\u6e96 0%\n\u504f\u79fb {deviation:F1} / \u5bb9\u8a31 \u00b1{stableThreshold:F0}   \u7576\u524d\u529b\u9053 {currentForce:F1}";
                     return;
                 }
 
                 calibrationHoldTimer = Mathf.Min(calibrationHoldDuration, calibrationHoldTimer + Time.unscaledDeltaTime);
                 progressPercent = Mathf.RoundToInt(PhaseTwoCalibrationProgress * 100f);
-                phaseTwoCalibrationStatusText = $"\u611f\u6e2c\u5668\u6821\u6e96 {progressPercent}%\n\u57fa\u6e96\u503c {calibrationAnchorValue:F1}   \u504f\u79fb {deviation:F1} / \u5bb9\u8a31 \u00b1{stableThreshold:F0}   \u7576\u524d\u529b\u9053 {currentForce:F1}\n{GetPhaseTwoSensorDebugLine()}";
+                phaseTwoCalibrationStatusText = $"\u6301\u528d\u6821\u6e96 {progressPercent}%\n\u57fa\u6e96\u503c {calibrationAnchorValue:F1}   \u504f\u79fb {deviation:F1} / \u5bb9\u8a31 \u00b1{stableThreshold:F0}   \u7576\u524d\u529b\u9053 {currentForce:F1}";
             }
         }
         else
@@ -1201,12 +1236,7 @@ public class BullfightGameFlow : MonoBehaviour
                 ? Mathf.Min(calibrationHoldDuration, calibrationHoldTimer + Time.unscaledDeltaTime)
                 : 0f;
             progressPercent = Mathf.RoundToInt(PhaseTwoCalibrationProgress * 100f);
-            string sensorStatus = arduinoTest != null && !string.IsNullOrWhiteSpace(arduinoTest.CurrentConnectionStatus)
-                ? arduinoTest.CurrentConnectionStatus
-                : "[\u672a\u9023\u63a5\u5230\u611f\u6e2c\u5668]";
-            phaseTwoCalibrationStatusText = calibrating
-                ? $"{sensorStatus}\n\u6301\u7e8c\u7a69\u5b9a\u4e2d {progressPercent}%"
-                : $"{sensorStatus}\n\u6309 G \u958b\u59cb\u6821\u6e96 {progressPercent}%";
+            phaseTwoCalibrationStatusText = GetPhaseTwoCalibrationFallbackStatus(progressPercent, calibrating);
         }
 
         if (calibrationHoldTimer < calibrationHoldDuration)
@@ -1215,7 +1245,7 @@ public class BullfightGameFlow : MonoBehaviour
         phaseTwoCalibrated = true;
         mercyTimer = 0f;
         calibrationHoldTimer = calibrationHoldDuration;
-        phaseTwoCalibrationStatusText = $"\u6821\u6e96\u5b8c\u6210 100%\n{GetPhaseTwoSensorDebugLine()}";
+        phaseTwoCalibrationStatusText = "\u6821\u6e96\u5b8c\u6210 100%";
         lastPhaseTwoResult = string.Empty;
 
         if (phaseTwoAutoStartRoundAfterCalibration)
@@ -1728,6 +1758,8 @@ public class BullfightGameFlow : MonoBehaviour
         phaseTwoState = PhaseTwoState.Calibration;
         phaseTwoStateElapsed = 0f;
         calibrationHoldTimer = 0f;
+        calibrationSignalWaitTimer = 0f;
+        phaseTwoCalibrationUsingSensor = false;
         ResetPhaseTwoCalibrationAnchor();
         phaseTwoHasCommittedAttack = false;
         currentRoundHasPerfectAdvantage = false;
@@ -1741,7 +1773,7 @@ public class BullfightGameFlow : MonoBehaviour
         phaseTwoAutoStartRoundAfterCalibration = autoStartRoundAfterCalibration;
         phaseTwoResolveShuttleSegment = 0;
         phaseTwoResolveNarrationLine = string.Empty;
-        phaseTwoCalibrationStatusText = "\u6301\u528d\u4e0d\u52d5 5 \u79d2\u6821\u6e96";
+        phaseTwoCalibrationStatusText = GetPhaseTwoCalibrationFallbackStatus(0f);
         lastPhaseTwoResult = string.Empty;
         bullAI?.PlayPhaseTwoStandoffIdle();
         RequestPhaseTwoSensorCalibration();
@@ -1781,7 +1813,7 @@ public class BullfightGameFlow : MonoBehaviour
 
     private void HandleDebugShortcuts()
     {
-        if (!enableDebugShortcuts)
+        if (!AreDebugShortcutsAvailable())
             return;
 
         if (Input.GetKeyDown(debugPhaseTwoKey) && bullStats != null)
@@ -1802,6 +1834,17 @@ public class BullfightGameFlow : MonoBehaviour
         if (Input.GetKeyDown(debugKillPlayerKey) && playerStats != null)
             playerStats.ForceDeathForDebug();
     }
+
+    private static bool IsDevelopmentDebugEnvironment()
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    private bool AreDebugShortcutsAvailable() => enableDebugShortcuts && IsDevelopmentDebugEnvironment();
 
     private void SetEnding(EndingType ending)
     {
@@ -1940,6 +1983,46 @@ public class BullfightGameFlow : MonoBehaviour
     private string GetAttackLabel()
     {
         return playerController != null ? playerController.GetAttackDisplayLabel() : "B";
+    }
+
+    private string GetPhaseTwoCalibrationLabel()
+    {
+        return playerController != null ? playerController.GetPhaseTwoCalibrationDisplayLabel() : "G";
+    }
+
+    private string GetPhaseTwoStabLabel()
+    {
+        return playerController != null ? playerController.GetPhaseTwoStabDisplayLabel() : "E";
+    }
+
+    private string GetPhaseTwoTutorialInstruction()
+    {
+        return "\u5148\u7a69\u5b9a\u6301\u528d\u5b8c\u6210\u6821\u6e96\uff0c\u518d\u6293\u6e96\u6642\u6a5f\u5411\u524d\u523a\u51fa\u3002";
+    }
+
+    private string GetPhaseTwoStandoffInstruction()
+    {
+        return "\u7dad\u6301\u5c0d\u5cd9\uff0c\u6293\u6e96\u6642\u6a5f\u523a\u51fa\u6c7a\u5b9a\u6027\u4e00\u64ca\u3002";
+    }
+
+    private bool IsPhaseTwoSensorActivelyDrivingInput()
+    {
+        return arduinoTest != null && arduinoTest.ConnectionState == ArduinoTest.SensorConnectionState.Active;
+    }
+
+    private bool IsWaitingForSensorCalibrationSignal()
+    {
+        return phaseTwoState == PhaseTwoState.Calibration &&
+               arduinoTest != null &&
+               arduinoTest.ConnectionState == ArduinoTest.SensorConnectionState.PortOpenNoSignal &&
+               calibrationSignalWaitTimer < Mathf.Max(0f, calibrationSensorGraceDuration);
+    }
+
+    private string GetPhaseTwoCalibrationFallbackStatus(float progressPercent, bool calibrating = false)
+    {
+        return calibrating
+            ? $"\u6301\u528d\u6821\u6e96 {progressPercent}%"
+            : $"\u7a69\u5b9a\u6301\u528d\uff0c\u6e96\u5099\u958b\u59cb\u6821\u6e96 {progressPercent}%";
     }
 
     private bool HasMissingReferences()
@@ -2420,6 +2503,9 @@ public class BullfightGameFlow : MonoBehaviour
     {
         ResetSceneForMainMenu();
 
+        BullfightStartMenu startMenu = FindObjectOfType<BullfightStartMenu>(true);
+        startMenu?.PrepareForDeferredShow();
+
         ManualStartMenuController manualStartMenu = FindObjectOfType<ManualStartMenuController>(true);
         if (manualStartMenu != null)
         {
@@ -2427,14 +2513,13 @@ public class BullfightGameFlow : MonoBehaviour
             return;
         }
 
-        BullfightStartMenu startMenu = FindObjectOfType<BullfightStartMenu>(true);
         if (startMenu == null)
         {
             GameObject startMenuObject = new("BullfightStartMenu");
             startMenu = startMenuObject.AddComponent<BullfightStartMenu>();
         }
 
-        startMenu.ReturnToMenu();
+        startMenu.ResetAndShowMenu();
     }
 
     public void ResetSceneForMainMenu()
@@ -2630,30 +2715,18 @@ public class BullfightGameFlow : MonoBehaviour
 
     private string GetPhaseTwoCalibrationLine()
     {
-        if (phaseTwoReflectionLines == null || phaseTwoReflectionLines.Length == 0)
+        if (phaseTwoState != PhaseTwoState.Calibration)
             return string.Empty;
 
-        int clampedIndex = Mathf.Clamp(PhaseTwoUpcomingRoundIndex - 1, 0, phaseTwoReflectionLines.Length - 1);
-        return phaseTwoReflectionLines[clampedIndex] ?? string.Empty;
+        if (IsWaitingForSensorCalibrationSignal())
+            return "\u7a69\u5b9a\u6301\u528d\uff0c\u6e96\u5099\u958b\u59cb\u6821\u6e96\u3002";
+
+        return "\u7a69\u5b9a\u6301\u528d 5 \u79d2\u5b8c\u6210\u6821\u6e96\u3002";
     }
 
     private string GetPhaseTwoCalibrationStatus()
     {
         return phaseTwoState == PhaseTwoState.Calibration ? phaseTwoCalibrationStatusText : string.Empty;
-    }
-
-    private string GetPhaseTwoSensorDebugLine()
-    {
-        if (arduinoTest == null)
-            return "\u611f\u6e2c\u5668\u72c0\u614b\uff1a\u627e\u4e0d\u5230 ArduinoTest";
-
-        if (!string.IsNullOrWhiteSpace(arduinoTest.LastSensorMessage))
-            return $"\u611f\u6e2c\u5668\u5c01\u5305\uff1a{arduinoTest.LastSensorMessage}";
-
-        if (!string.IsNullOrWhiteSpace(arduinoTest.CurrentConnectionStatus))
-            return arduinoTest.CurrentConnectionStatus;
-
-        return "\u611f\u6e2c\u5668\u72c0\u614b\uff1a\u7b49\u5f85\u8cc7\u6599";
     }
 
     private void ResetPhaseTwoCalibrationAnchor()
