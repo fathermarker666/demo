@@ -1563,7 +1563,6 @@ public class BullfightGameFlow : MonoBehaviour
         else
         {
             playerHitCount++;
-            playerStats?.TakeDamage(0f);
             bullAI?.PlayPhaseTwoAttackFollowThrough();
             phaseTwoResolveNarrationLine = GetRandomPhaseTwoReflectionLine();
         }

@@ -102,8 +102,11 @@ public class BullfightPlayerController : MonoBehaviour
         }
 
         UpdateHoldingCloth();
-        if (playerStats != null && playerStats.isStunned)
+        if (playerStats != null && (playerStats.isStunned || playerStats.IsBullChargeLocked))
+        {
             ForceStopMovement();
+            return;
+        }
         FreezeMovementWhileHoldingCloth();
         UpdateBufferedInputs();
         HandleEvade();

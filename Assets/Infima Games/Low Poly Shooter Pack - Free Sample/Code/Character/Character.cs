@@ -897,8 +897,40 @@ namespace InfimaGames.LowPolyShooterPack
 			if (control == null || control.device is not Gamepad)
 				return false;
 
-			// Standard XInput controllers already map correctly, so only correct the generic/non-XInput path.
-			return control.device.layout != "XInputControllerWindows";
+			return IsGenericLookQuirkDevice(control.device);
+		}
+
+		private static bool IsGenericLookQuirkDevice(InputDevice device)
+		{
+			if (device == null)
+				return false;
+
+			if (IsStandardLookLayout(device))
+				return false;
+
+			return device.layout == "Gamepad" || device.layout == "Joystick";
+		}
+
+		private static bool IsStandardLookLayout(InputDevice device)
+		{
+			if (device == null)
+				return false;
+
+			if (device.layout == "XInputControllerWindows")
+				return true;
+
+			if (InputSystem.IsFirstLayoutBasedOnSecond(device.layout, "DualShockGamepad"))
+				return true;
+
+			string identity = $"{device.layout} {device.displayName} {device.description.product} {device.description.manufacturer} {device.GetType().Name}".ToLowerInvariant();
+
+			return identity.Contains("dualshock") ||
+			       identity.Contains("dualsense") ||
+			       identity.Contains("playstation") ||
+			       identity.Contains("wireless controller") ||
+			       identity.Contains("sony") ||
+			       identity.Contains("xinput") ||
+			       identity.Contains("xbox");
 		}
 
 		private void ApplyJoystickLookAxes()
@@ -906,8 +938,12 @@ namespace InfimaGames.LowPolyShooterPack
 			if (!cursorLocked || !useJoystickZRLookAxes)
 				return;
 
+			Gamepad gamepad = Gamepad.current;
+			if (gamepad != null && IsStandardLookLayout(gamepad))
+				return;
+
 			Joystick joystick = Joystick.current;
-			if (joystick == null)
+			if (joystick == null || !IsGenericLookQuirkDevice(joystick))
 			{
 				joystickLookAxisZ = null;
 				joystickLookAxisRz = null;

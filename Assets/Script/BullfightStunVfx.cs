@@ -233,27 +233,36 @@ public class BullfightStunVfx : MonoBehaviour
     private void ApplyCameraFov(float visualWeight, float pulse, float shockWeight)
     {
         EnsureCameraReference();
-        if (worldCamera == null)
+        if (worldCamera == null || !hasBaseFieldOfView)
             return;
 
-        if (!hasBaseFieldOfView || visualWeight <= 0.001f)
+        float targetFov = baseFieldOfView;
+        if (visualWeight > 0.001f)
         {
-            baseFieldOfView = worldCamera.fieldOfView;
-            hasBaseFieldOfView = true;
+            float targetOffset = (cameraFovKick * visualWeight) + (cameraFovWave * currentWeight * Mathf.Abs(pulse)) + (cameraFovWave * 0.6f * shockWeight);
+            targetFov += targetOffset;
         }
 
-        float targetOffset = (cameraFovKick * visualWeight) + (cameraFovWave * currentWeight * Mathf.Abs(pulse)) + (cameraFovWave * 0.6f * shockWeight);
-        float targetFov = baseFieldOfView + targetOffset;
-        worldCamera.fieldOfView = Mathf.Lerp(worldCamera.fieldOfView, targetFov, Time.unscaledDeltaTime * cameraFovRecoverSpeed);
+        float nextFov = Mathf.Lerp(worldCamera.fieldOfView, targetFov, Time.unscaledDeltaTime * cameraFovRecoverSpeed);
+        if (visualWeight <= 0.001f && Mathf.Abs(nextFov - baseFieldOfView) <= 0.01f)
+            nextFov = baseFieldOfView;
+
+        worldCamera.fieldOfView = nextFov;
     }
 
     private void EnsureCameraReference()
     {
-        if (worldCamera != null)
+        Character character = GetComponent<Character>() ?? (playerStats != null ? playerStats.GetComponent<Character>() : null);
+        Camera resolvedCamera = character != null ? character.GetCameraWorld() : Camera.main;
+        if (resolvedCamera == null)
             return;
 
-        Character character = GetComponent<Character>() ?? (playerStats != null ? playerStats.GetComponent<Character>() : null);
-        worldCamera = character != null ? character.GetCameraWorld() : Camera.main;
+        if (resolvedCamera == worldCamera && hasBaseFieldOfView)
+            return;
+
+        worldCamera = resolvedCamera;
+        baseFieldOfView = worldCamera.fieldOfView;
+        hasBaseFieldOfView = true;
     }
 
     private float GetShockWeight()
@@ -286,6 +295,13 @@ public class BullfightStunVfx : MonoBehaviour
 
     private void ResetPresentation()
     {
+        currentWeight = 0f;
+        damageFlashWeight = 0f;
+        lingerTimer = 0f;
+        shockTimer = 0f;
+        effectTime = 0f;
+        wasStunnedLastFrame = false;
+
         if (vignetteRect != null)
             vignetteRect.localScale = new Vector3(vignetteOverscan, vignetteOverscan, 1f);
 

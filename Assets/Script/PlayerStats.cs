@@ -105,6 +105,7 @@ public class PlayerStats : MonoBehaviour
     private Vector3 mainMenuFrozenPosition;
     private Quaternion mainMenuFrozenRotation = Quaternion.identity;
     private Quaternion mainMenuFrozenCameraRotation = Quaternion.identity;
+    private bool bullChargeLocked;
     public event Action OnDeath;
 
     [Header("Death Presentation")]
@@ -128,6 +129,7 @@ public class PlayerStats : MonoBehaviour
     public bool IsDashing => dashTimer > 0f;
     public bool IsInvulnerable => invulnerabilityTimer > 0f;
     public bool IsPerfectDodgeBuffActive => perfectDodgeBuffActive;
+    public bool IsBullChargeLocked => bullChargeLocked;
     public float LastDashTime { get; private set; } = -999f;
     public float HealthNormalized => maxHealth <= 0f ? 0f : currentHealth / maxHealth;
     public float StaminaNormalized => maxStamina <= 0f ? 0f : currentStamina / maxStamina;
@@ -207,9 +209,24 @@ public class PlayerStats : MonoBehaviour
             EnforceMainMenuFrozenPose();
     }
 
+    private bool IsGameplayControlLocked()
+    {
+        return isStunned || bullChargeLocked;
+    }
+
+    private void RestoreGameplayControlsIfAvailable()
+    {
+        if (mainMenuFrozen)
+            return;
+
+        SetShooterControlEnabled(shooterGameplayEnabled && !IsGameplayControlLocked());
+        if (!IsGameplayControlLocked() && !isHoldingCloth)
+            EnsureGameplayLookUnlocked();
+    }
+
     public bool CanAct()
     {
-        return !IsDead && !isStunned && !isActing;
+        return !IsDead && !IsGameplayControlLocked() && !isActing;
     }
 
     public bool TrySpendStamina(float amount)
@@ -289,16 +306,37 @@ public class PlayerStats : MonoBehaviour
 
     public bool TryEvade() => TryDash();
 
+    public void SetBullChargeLock(bool active)
+    {
+        bool nextValue = active && !IsDead;
+        if (bullChargeLocked == nextValue)
+            return;
+
+        bullChargeLocked = nextValue;
+        if (bullChargeLocked)
+        {
+            isActing = false;
+            dashTimer = 0f;
+            dashVelocity = Vector3.zero;
+            SetHoldingCloth(false);
+            StopMovementImmediate();
+            SetShooterControlEnabled(false);
+            return;
+        }
+
+        RestoreGameplayControlsIfAvailable();
+    }
+
     public void SetHoldingCloth(bool value)
     {
-        bool nextValue = !IsDead && !isStunned && value;
+        bool nextValue = !IsDead && !IsGameplayControlLocked() && value;
         if (isHoldingCloth == nextValue)
             return;
 
         isHoldingCloth = nextValue;
         // Keep controller active during hold cloth, otherwise look input can get stuck
         // when rapidly toggling hold/release.
-        SetShooterControlEnabled(shooterGameplayEnabled && !isStunned);
+        SetShooterControlEnabled(shooterGameplayEnabled && !IsGameplayControlLocked());
 
         if (!isHoldingCloth)
             EnsureGameplayLookUnlocked();
@@ -318,20 +356,19 @@ public class PlayerStats : MonoBehaviour
 
     public void TakeDamage(float amount)
     {
-        Debug.Log("<color=orange>玩家受到傷害</color>");
+        amount = Mathf.Max(0f, amount);
+        if (amount <= 0f)
+            return;
 
-        if (IsDead) { Debug.Log("玩家已死亡，忽略傷害"); return; }
+        if (IsDead)
+            return;
 
         if (IsInvulnerable)
-        {
-            Debug.Log($"玩家受傷失敗，目前無敵中 (剩餘時間: {invulnerabilityTimer})");
             return;
-        }
 
         currentHealth -= amount;
         currentHealth = Mathf.Clamp(currentHealth, 0f, maxHealth);
 
-        Debug.Log($"<color=red>玩家扣血</color> HP 剩下: {currentHealth}");
         stunVfx?.TriggerDamageFlash();
         OnDamaged?.Invoke(amount);
         PlayGamepadRumble(damageRumbleLow, damageRumbleHigh, damageRumbleDuration);
@@ -399,6 +436,7 @@ public class PlayerStats : MonoBehaviour
         isActing = false;
         isTaunting = false;
         isStunned = false;
+        bullChargeLocked = false;
 
         if (refillHealth)
             currentHealth = maxHealth;
@@ -431,7 +469,7 @@ public class PlayerStats : MonoBehaviour
         deathPresentationApplied = false;
         deathPresentationTimer = 0f;
         clothCameraLockActive = false;
-        SetShooterControlEnabled(shooterGameplayEnabled);
+        SetShooterControlEnabled(shooterGameplayEnabled && !IsGameplayControlLocked());
 
         if (wasStunned)
             OnStunStateChanged?.Invoke(false);
@@ -442,8 +480,8 @@ public class PlayerStats : MonoBehaviour
     public void SetShooterGameplayEnabled(bool enabledState)
     {
         shooterGameplayEnabled = enabledState;
-        SetShooterControlEnabled(enabledState && !isStunned);
-        if (enabledState && !isStunned && !isHoldingCloth)
+        SetShooterControlEnabled(enabledState && !IsGameplayControlLocked());
+        if (enabledState && !IsGameplayControlLocked() && !isHoldingCloth)
             EnsureGameplayLookUnlocked();
     }
 
@@ -463,10 +501,10 @@ public class PlayerStats : MonoBehaviour
         mainMenuFrozen = false;
         hasMainMenuFrozenPose = false;
         shooterGameplayEnabled = true;
-        SetShooterControlEnabled(!isStunned);
+        SetShooterControlEnabled(!IsGameplayControlLocked());
         ApplyPerfectDodgeBuffState(perfectDodgeBuffTimer > 0f);
 
-        if (!isStunned && !isHoldingCloth)
+        if (!IsGameplayControlLocked() && !isHoldingCloth)
             EnsureGameplayLookUnlocked();
     }
 
@@ -533,8 +571,9 @@ public class PlayerStats : MonoBehaviour
         if (stunTimer <= 0f)
         {
             isStunned = false;
-            SetShooterControlEnabled(shooterGameplayEnabled);
-            EnsureGameplayLookUnlocked();
+            SetShooterControlEnabled(shooterGameplayEnabled && !bullChargeLocked);
+            if (!bullChargeLocked)
+                EnsureGameplayLookUnlocked();
             OnStunStateChanged?.Invoke(false);
         }
     }
@@ -627,7 +666,6 @@ public class PlayerStats : MonoBehaviour
         StopMovementImmediate();
         SetShooterControlEnabled(false);
         OnStunStateChanged?.Invoke(true);
-        Debug.Log("Player is stunned.");
     }
 
     private void ApplyPerfectDodgeBuffState(bool active)
@@ -676,6 +714,7 @@ public class PlayerStats : MonoBehaviour
         currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
         isActing = false;
         isStunned = false;
+        bullChargeLocked = false;
         SetHoldingCloth(false);
         StopMovementImmediate();
         SetShooterControlEnabled(false);
@@ -852,7 +891,7 @@ public class PlayerStats : MonoBehaviour
     {
         CachePresentationReferences();
 
-        bool shouldLock = !IsDead && !isStunned && isHoldingCloth;
+        bool shouldLock = !IsDead && !IsGameplayControlLocked() && isHoldingCloth;
         if (!shouldLock)
         {
             if (clothCameraLockActive)
@@ -894,7 +933,7 @@ public class PlayerStats : MonoBehaviour
         if (firstPersonCamera != null)
             firstPersonCamera.localRotation = GetGameplayCameraLocalRotation();
 
-        if (cameraLook != null && !IsDead && !isStunned)
+        if (cameraLook != null && !IsDead && !IsGameplayControlLocked())
         {
             SyncCameraLookStateFromTransforms();
             cameraLook.enabled = true;
@@ -920,7 +959,7 @@ public class PlayerStats : MonoBehaviour
 
     private void EnsureGameplayLookUnlocked()
     {
-        if (cameraLook == null || IsDead || isStunned || !shooterGameplayEnabled)
+        if (cameraLook == null || IsDead || IsGameplayControlLocked() || !shooterGameplayEnabled)
             return;
 
         if (cameraLook.enabled)
