@@ -693,7 +693,9 @@ public partial class BullfightHudController : MonoBehaviour
         if (tutorialOverlayRoot == null)
             return;
 
-        bool shouldShow = gameFlow != null && gameFlow.ShouldShowTutorialOverlay();
+        bool shouldShow = gameFlow != null &&
+                          gameFlow.ShouldShowTutorialOverlay() &&
+                          !gameFlow.IsTutorialCompletionVideoPlaybackActive;
         tutorialOverlayRoot.gameObject.SetActive(shouldShow);
         if (tutorialBackdrop != null)
             tutorialBackdrop.gameObject.SetActive(shouldShow);

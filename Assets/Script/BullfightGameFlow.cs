@@ -1,5 +1,6 @@
 ﻿using InfimaGames.LowPolyShooterPack;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using UnityEngine.Rendering;
@@ -238,6 +239,10 @@ public partial class BullfightGameFlow : MonoBehaviour
     [Range(0f, 2f)] public float endingVideoVolume = 1.5f;
     public KeyCode endingSkipKey = KeyCode.B;
 
+    [Header("Tutorial Completion Video")]
+    public VideoClip tutorialCompletionVideoClip;
+    [Range(0f, 2f)] public float tutorialCompletionVideoVolume = 1f;
+
     [Header("Skybox")]
     public Material phaseOneSkybox;
     public Material phaseTwoSkybox;
@@ -364,6 +369,7 @@ public partial class BullfightGameFlow : MonoBehaviour
                                             phaseTwoState == PhaseTwoState.Intro &&
                                             phaseTwoStateElapsed >= introQuestionDelay;
     public bool IsTutorialActive => currentPhase == GamePhase.PhaseZeroTutorial;
+    public bool IsTutorialCompletionVideoPlaybackActive => tutorialCompletionVideoPlaybackActive;
     public bool IsTutorialCapaStepActive => currentPhase == GamePhase.PhaseZeroTutorial && tutorialState == TutorialState.Capa;
     public bool IsTutorialAttackStepActive => currentPhase == GamePhase.PhaseZeroTutorial && tutorialState == TutorialState.Attack;
     public bool IsTutorialRulesStep => currentPhase == GamePhase.PhaseZeroTutorial && tutorialState == TutorialState.Rules;
@@ -443,8 +449,19 @@ public partial class BullfightGameFlow : MonoBehaviour
     private Image endingSkipForceBarBackground;
     private Image endingSkipForceBarFill;
     private RectTransform endingSkipForceBarFillRect;
+    private RectTransform tutorialCompletionSkipRoot;
+    private Text tutorialCompletionSkipLabel;
+    private bool tutorialCompletionVideoPlaybackActive;
     private bool endingVideoPlaybackActive;
     private float endingVideoStartDelayRemaining = -1f;
+    private bool tutorialCompletionVideoFreezeStateCaptured;
+    private float tutorialCompletionVideoSavedTimeScale = 1f;
+    private float tutorialCompletionVideoSavedFixedDeltaTime = 0.02f;
+    private bool tutorialCompletionVideoSavedPlayerControllerEnabled;
+    private bool tutorialCompletionVideoSavedBullAiEnabled;
+    private bool tutorialCompletionVideoSavedCameraLookEnabled;
+    private CameraLook tutorialCompletionVideoCameraLook;
+    private readonly System.Collections.Generic.List<GameObject> tutorialCompletionHiddenUiRoots = new System.Collections.Generic.List<GameObject>();
     private BullDebugOverlay endingHiddenDebugOverlay;
     private readonly System.Collections.Generic.List<GameObject> endingHiddenRootObjects = new System.Collections.Generic.List<GameObject>();
     private readonly System.Collections.Generic.List<Renderer> endingHiddenRenderers = new System.Collections.Generic.List<Renderer>();
@@ -497,6 +514,12 @@ public partial class BullfightGameFlow : MonoBehaviour
         if (UpdateArcadeSequences())
             return;
 
+        if (tutorialCompletionVideoPlaybackActive)
+        {
+            UpdateTutorialCompletionVideoPlayback();
+            return;
+        }
+
         if (currentPhase == GamePhase.PhaseZeroTutorial)
         {
             UpdateTutorial();
@@ -521,8 +544,19 @@ public partial class BullfightGameFlow : MonoBehaviour
         {
             if (currentPhase == GamePhase.PhaseOne)
             {
+                if (IsArcadePhaseClearSequenceActive)
+                    return;
+
+                if (isEnteringPhaseTwo)
+                {
+                    EnterPhaseTwo();
+                    return;
+                }
+
                 if (!TryBeginArcadePhaseOneClearSequence())
                     isEnteringPhaseTwo = true;
+
+                return;
             }
             else if (!isEnteringPhaseTwo)
             {
@@ -652,7 +686,9 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     public bool ShouldShowTutorialOverlay()
     {
-        return currentPhase == GamePhase.PhaseZeroTutorial && currentEnding == EndingType.None;
+        return currentPhase == GamePhase.PhaseZeroTutorial &&
+               currentEnding == EndingType.None &&
+               !tutorialCompletionVideoPlaybackActive;
     }
 
     private void UpdateTutorial()
@@ -940,6 +976,141 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private void StartPhaseOneFromTutorial()
     {
+        if (TryBeginTutorialCompletionVideoPlayback())
+            return;
+
+        EnterPhaseOneFromTutorialImmediate();
+    }
+
+    private bool TryBeginTutorialCompletionVideoPlayback()
+    {
+        if (tutorialCompletionVideoPlaybackActive)
+            return true;
+
+        if (endingVideoPlayer == null || tutorialCompletionVideoClip == null)
+            return false;
+
+        tutorialCompletionVideoPlaybackActive = true;
+        LockGameplayForTutorialCompletionVideo();
+        ShowEndingSkipUi(false);
+        EnsureTutorialCompletionSkipUi();
+        ShowTutorialCompletionSkipUi(true);
+
+        endingVideoPlayer.loopPointReached -= HandleEndingVideoCompleted;
+        endingVideoPlayer.loopPointReached -= HandleTutorialCompletionVideoCompleted;
+        endingVideoPlayer.loopPointReached += HandleTutorialCompletionVideoCompleted;
+        endingVideoPlayer.isLooping = false;
+        endingVideoPlayer.playOnAwake = false;
+        endingVideoPlayer.waitForFirstFrame = true;
+        endingVideoPlayer.skipOnDrop = false;
+        endingVideoPlayer.clip = tutorialCompletionVideoClip;
+        ConfigureVideoAudio(tutorialCompletionVideoClip, tutorialCompletionVideoVolume);
+        audioController?.StopAllAudio();
+
+        if (endingVideoPlayer.gameObject != null)
+            endingVideoPlayer.gameObject.SetActive(true);
+
+        endingVideoPlayer.Stop();
+        endingVideoPlayer.Play();
+        return true;
+    }
+
+    private void LockGameplayForTutorialCompletionVideo()
+    {
+        ResolveReferencesIfNeeded();
+        tutorialCompletionVideoCameraLook = ResolveTutorialCompletionVideoCameraLook();
+        tutorialCompletionVideoSavedTimeScale = Time.timeScale;
+        tutorialCompletionVideoSavedFixedDeltaTime = Time.fixedDeltaTime;
+        tutorialCompletionVideoSavedPlayerControllerEnabled = playerController != null && playerController.enabled;
+        tutorialCompletionVideoSavedBullAiEnabled = bullAI != null && bullAI.enabled;
+        tutorialCompletionVideoSavedCameraLookEnabled = tutorialCompletionVideoCameraLook != null && tutorialCompletionVideoCameraLook.enabled;
+        tutorialCompletionVideoFreezeStateCaptured = true;
+
+        playerController?.ClearInputBuffers();
+        playerController?.ForceStopMovement();
+
+        if (tutorialCompletionVideoCameraLook != null)
+            tutorialCompletionVideoCameraLook.enabled = false;
+
+        if (playerController != null)
+            playerController.enabled = false;
+
+        if (bullAI != null)
+        {
+            bullAI.SetTutorialControl(false);
+            bullAI.enabled = false;
+        }
+
+        if (playerStats != null)
+        {
+            playerStats.SetHoldingCloth(false);
+            playerStats.SetShooterGameplayEnabled(false);
+        }
+
+        if (timingRing != null)
+        {
+            timingRing.HideImmediate();
+            timingRing.ResetTimingWindow();
+        }
+
+        HideTutorialCompletionVideoUi();
+        Time.timeScale = 0f;
+        Time.fixedDeltaTime = 0f;
+    }
+
+    private void UpdateTutorialCompletionVideoPlayback()
+    {
+        if (IsTutorialCompletionVideoSkipPressedThisFrame())
+        {
+            SkipTutorialCompletionVideo();
+            return;
+        }
+
+        if (tutorialCompletionVideoPlaybackActive && endingVideoPlayer == null)
+            FinishTutorialCompletionVideoPlayback();
+    }
+
+    private void SkipTutorialCompletionVideo()
+    {
+        if (!tutorialCompletionVideoPlaybackActive)
+            return;
+
+        FinishTutorialCompletionVideoPlayback();
+    }
+
+    private void FinishTutorialCompletionVideoPlayback()
+    {
+        StopTutorialCompletionVideoPlayback();
+        EnterPhaseOneFromTutorialImmediate();
+    }
+
+    private void StopTutorialCompletionVideoPlayback()
+    {
+        tutorialCompletionVideoPlaybackActive = false;
+        ShowTutorialCompletionSkipUi(false);
+
+        if (endingVideoPlayer != null)
+        {
+            endingVideoPlayer.loopPointReached -= HandleTutorialCompletionVideoCompleted;
+            endingVideoPlayer.Stop();
+
+            if (endingVideoPlayer.gameObject != null)
+                endingVideoPlayer.gameObject.SetActive(false);
+        }
+
+        RestoreTutorialCompletionVideoFreezeState();
+    }
+
+    private void HandleTutorialCompletionVideoCompleted(VideoPlayer source)
+    {
+        if (source != null)
+            source.loopPointReached -= HandleTutorialCompletionVideoCompleted;
+
+        FinishTutorialCompletionVideoPlayback();
+    }
+
+    private void EnterPhaseOneFromTutorialImmediate()
+    {
         ResolveReferencesIfNeeded();
         ConfigureArcadeRun(true);
         tutorialFeedbackText = string.Empty;
@@ -956,10 +1127,15 @@ public partial class BullfightGameFlow : MonoBehaviour
         Time.timeScale = 1f;
         ApplySkyboxForPhase(GamePhase.PhaseOne);
         phaseTwoPresentation?.ExitPhaseTwo();
+        playerStats?.SetMainMenuFrozen(false);
         playerStats?.ResetCombatState();
         playerStats?.SetShooterGameplayEnabled(true);
         bullStats?.ResetCombatState();
         playerController?.ClearInputBuffers();
+        if (playerController != null)
+            playerController.enabled = true;
+        if (bullAI != null)
+            bullAI.enabled = true;
         bullAI?.SetTutorialControl(false);
         spawnManager?.ResetPlayerToSpawn();
         spawnManager?.ResetBullToSpawn();
@@ -1913,6 +2089,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private void ResetState()
     {
+        StopTutorialCompletionVideoPlayback();
         StopEndingVideoPlayback();
         ResetArcadeRuntimeState();
         currentPhase = GamePhase.PhaseOne;
@@ -2093,6 +2270,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private void BeginEndingVideoPlayback(EndingType ending)
     {
+        StopTutorialCompletionVideoPlayback();
         StopEndingVideoPlayback();
         EnsureEndingSkipUi();
         ShowEndingSkipUi(true);
@@ -2114,7 +2292,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         endingVideoPlayer.waitForFirstFrame = true;
         endingVideoPlayer.skipOnDrop = false;
         endingVideoPlayer.clip = endingClip;
-        ConfigureEndingVideoAudio(endingClip);
+        ConfigureVideoAudio(endingClip, endingVideoVolume);
         audioController?.StopBGM();
 
         if (endingVideoPlayer.gameObject != null)
@@ -2163,6 +2341,18 @@ public partial class BullfightGameFlow : MonoBehaviour
         ShowArcadeResultsOrReturnToMenu();
     }
 
+    private void HandleSkipVideoButtonPressed()
+    {
+        if (tutorialCompletionVideoPlaybackActive)
+        {
+            SkipTutorialCompletionVideo();
+            return;
+        }
+
+        if (endingVideoPlaybackActive)
+            SkipEndingVideo();
+    }
+
     private void StopEndingVideoPlayback()
     {
         endingVideoPlaybackActive = false;
@@ -2184,17 +2374,17 @@ public partial class BullfightGameFlow : MonoBehaviour
         RestoreSceneAfterEndingPlayback();
     }
 
-    private void ConfigureEndingVideoAudio(VideoClip endingClip)
+    private void ConfigureVideoAudio(VideoClip clip, float baseVolume)
     {
         if (endingVideoPlayer == null)
             return;
 
         endingVideoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
 
-        ushort audioTrackCount = endingClip != null ? endingClip.audioTrackCount : (ushort)0;
+        ushort audioTrackCount = clip != null ? clip.audioTrackCount : (ushort)0;
         endingVideoPlayer.controlledAudioTrackCount = audioTrackCount;
 
-        float resolvedVolume = Mathf.Max(0f, endingVideoVolume);
+        float resolvedVolume = Mathf.Max(0f, baseVolume);
         if (audioController != null)
             resolvedVolume *= Mathf.Lerp(0.85f, 1f, Mathf.Clamp01(audioController.SfxVolume));
 
@@ -2262,7 +2452,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
         endingSkipButton = rootObject.GetComponent<Button>();
         endingSkipButton.targetGraphic = background;
-        endingSkipButton.onClick.AddListener(SkipEndingVideo);
+        endingSkipButton.onClick.AddListener(HandleSkipVideoButtonPressed);
 
         GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(Text));
         labelObject.transform.SetParent(rootObject.transform, false);
@@ -2381,9 +2571,22 @@ public partial class BullfightGameFlow : MonoBehaviour
             endingSkipForceBarFillRect.anchorMax = new Vector2(normalizedForce, 1f);
     }
 
+    private bool IsTutorialCompletionVideoSkipPressedThisFrame()
+    {
+        return (Keyboard.current != null &&
+                (Keyboard.current.enterKey.wasPressedThisFrame ||
+                 Keyboard.current.numpadEnterKey.wasPressedThisFrame)) ||
+               (Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame);
+    }
+
     private bool IsEndingSkipKeyboardPressedThisFrame()
     {
         return endingSkipKey != KeyCode.None && Input.GetKeyDown(endingSkipKey);
+    }
+
+    private static string GetTutorialCompletionSkipInstructionText()
+    {
+        return "\u8df3\u904e\u5f71\u7247 / \u6309 Enter \u6216 A";
     }
 
     private string GetEndingSkipInstructionText(float threshold, bool canSkip)
@@ -2432,6 +2635,58 @@ public partial class BullfightGameFlow : MonoBehaviour
     {
         if (endingSkipRoot != null)
             endingSkipRoot.gameObject.SetActive(visible);
+    }
+
+    private void EnsureTutorialCompletionSkipUi()
+    {
+        if (tutorialCompletionSkipRoot != null)
+            return;
+
+        GameObject canvasObject = new GameObject("BullfightTutorialVideoSkipCanvas", typeof(Canvas), typeof(CanvasScaler));
+        canvasObject.transform.SetParent(transform, false);
+
+        Canvas canvas = canvasObject.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 6100;
+
+        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+
+        GameObject labelObject = new GameObject("TutorialVideoSkipLabel", typeof(RectTransform), typeof(Text));
+        labelObject.transform.SetParent(canvasObject.transform, false);
+
+        tutorialCompletionSkipRoot = labelObject.GetComponent<RectTransform>();
+        tutorialCompletionSkipRoot.anchorMin = new Vector2(1f, 0f);
+        tutorialCompletionSkipRoot.anchorMax = new Vector2(1f, 0f);
+        tutorialCompletionSkipRoot.pivot = new Vector2(1f, 0f);
+        tutorialCompletionSkipRoot.sizeDelta = new Vector2(520f, 48f);
+        tutorialCompletionSkipRoot.anchoredPosition = new Vector2(-32f, 28f);
+        tutorialCompletionSkipRoot.localScale = Vector3.one;
+        tutorialCompletionSkipRoot.localRotation = Quaternion.identity;
+
+        tutorialCompletionSkipLabel = labelObject.GetComponent<Text>();
+        tutorialCompletionSkipLabel.alignment = TextAnchor.MiddleRight;
+        tutorialCompletionSkipLabel.font = GetRuntimeUiFont();
+        tutorialCompletionSkipLabel.fontSize = 24;
+        tutorialCompletionSkipLabel.fontStyle = FontStyle.Bold;
+        tutorialCompletionSkipLabel.color = new Color(1f, 0.98f, 0.45f, 1f);
+        tutorialCompletionSkipLabel.raycastTarget = false;
+        tutorialCompletionSkipLabel.text = GetTutorialCompletionSkipInstructionText();
+
+        Outline outline = labelObject.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.92f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        ShowTutorialCompletionSkipUi(false);
+    }
+
+    private void ShowTutorialCompletionSkipUi(bool visible)
+    {
+        if (tutorialCompletionSkipRoot != null)
+            tutorialCompletionSkipRoot.gameObject.SetActive(visible);
     }
 
     private void HideSceneForEndingPlayback()
@@ -2505,6 +2760,86 @@ public partial class BullfightGameFlow : MonoBehaviour
         endingHiddenRootObjects.Clear();
         endingHiddenRenderers.Clear();
         endingHiddenCanvases.Clear();
+    }
+
+    private void RestoreTutorialCompletionVideoFreezeState()
+    {
+        if (!tutorialCompletionVideoFreezeStateCaptured)
+            return;
+
+        Time.timeScale = tutorialCompletionVideoSavedTimeScale <= 0f ? 1f : tutorialCompletionVideoSavedTimeScale;
+        Time.fixedDeltaTime = tutorialCompletionVideoSavedFixedDeltaTime > 0f ? tutorialCompletionVideoSavedFixedDeltaTime : 0.02f;
+
+        if (tutorialCompletionVideoCameraLook != null)
+            tutorialCompletionVideoCameraLook.enabled = tutorialCompletionVideoSavedCameraLookEnabled;
+
+        if (playerController != null)
+            playerController.enabled = tutorialCompletionVideoSavedPlayerControllerEnabled;
+
+        if (bullAI != null)
+            bullAI.enabled = tutorialCompletionVideoSavedBullAiEnabled;
+
+        RestoreTutorialCompletionVideoUi();
+        tutorialCompletionVideoCameraLook = null;
+        tutorialCompletionVideoFreezeStateCaptured = false;
+    }
+
+    private void HideTutorialCompletionVideoUi()
+    {
+        RestoreTutorialCompletionVideoUi();
+
+        string[] uiRootNames =
+        {
+            "HUD_Canvas",
+            "QTE_Runtime_Canvas",
+            "P_LPSP_UI_Canvas",
+            "P_LPSP_UI_Canvas(Clone)",
+            "BullfightStunOverlay",
+            "BullfightPerfectDodgeOverlay",
+            "SK_FP_CH_Default_Cubic_v2",
+            "SK_FP_CH_Default_Cubic"
+        };
+
+        System.Collections.Generic.HashSet<GameObject> resolvedRoots = new System.Collections.Generic.HashSet<GameObject>();
+        for (int i = 0; i < uiRootNames.Length; i++)
+        {
+            Transform sceneTransform = BullfightSceneCache.FindSceneObjectByName<Transform>(uiRootNames[i]);
+            if (sceneTransform != null)
+                resolvedRoots.Add(sceneTransform.gameObject);
+        }
+
+        BullfightHudController hudController = BullfightHudController.Instance != null
+            ? BullfightHudController.Instance
+            : FindObjectOfType<BullfightHudController>(true);
+        if (hudController != null)
+            resolvedRoots.Add(hudController.gameObject);
+
+        BullfightPauseSettingsUI pauseSettingsUi = BullfightPauseSettingsUI.Instance != null
+            ? BullfightPauseSettingsUI.Instance
+            : FindObjectOfType<BullfightPauseSettingsUI>(true);
+        if (pauseSettingsUi != null)
+            resolvedRoots.Add(pauseSettingsUi.gameObject);
+
+        foreach (GameObject uiRoot in resolvedRoots)
+        {
+            if (uiRoot == null || !uiRoot.activeSelf)
+                continue;
+
+            tutorialCompletionHiddenUiRoots.Add(uiRoot);
+            uiRoot.SetActive(false);
+        }
+    }
+
+    private void RestoreTutorialCompletionVideoUi()
+    {
+        for (int i = 0; i < tutorialCompletionHiddenUiRoots.Count; i++)
+        {
+            GameObject hiddenRoot = tutorialCompletionHiddenUiRoots[i];
+            if (hiddenRoot != null)
+                hiddenRoot.SetActive(true);
+        }
+
+        tutorialCompletionHiddenUiRoots.Clear();
     }
 
     private bool ShouldKeepRootVisibleDuringEnding(GameObject rootObject)
@@ -2665,6 +3000,18 @@ public partial class BullfightGameFlow : MonoBehaviour
             arduinoTest = BullfightSceneCache.FindObject<ArduinoTest>();
 
         RefreshTutorialSubscriptions();
+    }
+
+    private CameraLook ResolveTutorialCompletionVideoCameraLook()
+    {
+        if (playerStats != null)
+        {
+            CameraLook localCameraLook = playerStats.GetComponentInChildren<CameraLook>(true);
+            if (localCameraLook != null)
+                return localCameraLook;
+        }
+
+        return FindObjectOfType<CameraLook>(true);
     }
 
     private void ResetBullForPhaseTwoRound(int sideSign = 0)

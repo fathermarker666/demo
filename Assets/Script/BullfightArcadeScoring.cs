@@ -108,7 +108,7 @@ public sealed class BullfightArcadeScoring
     private const int PhaseOneNoDamageBonus = 1500;
     private const int PhaseTwoClearBonus = 3500;
     private const int PhaseTwoPerfectRunBonus = 2500;
-    private const float PhaseOneDurationSeconds = 120f;
+    private const float PhaseOneDurationSeconds = 210f;
     private const float BanderillasMissTimeout = 1f;
     private const int PendingUiEventLimit = 64;
 
@@ -205,6 +205,9 @@ public sealed class BullfightArcadeScoring
     public void Tick(float unscaledDeltaTime)
     {
         if (!runActive || !arcadeEnabled)
+            return;
+
+        if (BullfightPauseSettingsUI.Instance != null && BullfightPauseSettingsUI.Instance.IsPauseMenuOpen)
             return;
 
         if (gameFlow != null)

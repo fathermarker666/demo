@@ -496,9 +496,22 @@ public class BullAI : MonoBehaviour
     {
         BoxCollider hitboxCollider = chargeHitbox != null ? chargeHitbox.GetComponent<BoxCollider>() : null;
         if (hitboxCollider != null)
-            return Mathf.Max(0.45f, hitboxCollider.size.x * 0.5f) + telegraphLanePadding;
+            return Mathf.Max(0.45f, hitboxCollider.size.x * 0.5f);
 
-        return GetBullBodyHalfWidth() + telegraphLanePadding;
+        return Mathf.Max(0.45f, GetConfiguredChargeHitboxWidth() * 0.5f);
+    }
+
+    private float GetBaseChargeHitboxWidth()
+    {
+        if (bullCollider is BoxCollider bodyBox && bodyBox.transform == transform)
+            return Mathf.Max(0.45f, bodyBox.size.x * 0.75f);
+
+        return 0.75f;
+    }
+
+    private float GetConfiguredChargeHitboxWidth()
+    {
+        return GetBaseChargeHitboxWidth() + Mathf.Max(0f, telegraphLanePadding) * 2f;
     }
 
     private float GetTelegraphDisplayTravelDistance()
@@ -1978,12 +1991,12 @@ public class BullAI : MonoBehaviour
         if (bullCollider is BoxCollider bodyBox && bodyBox.transform == transform)
         {
             hitboxCollider.center = bodyBox.center + new Vector3(0f, 0f, (bodyBox.size.z * 0.5f) + (hitDistance * 0.5f));
-            hitboxCollider.size = new Vector3(Mathf.Max(0.45f, bodyBox.size.x * 0.75f), Mathf.Max(0.7f, bodyBox.size.y * 0.75f), Mathf.Max(0.8f, hitDistance * 1.2f));
+            hitboxCollider.size = new Vector3(GetConfiguredChargeHitboxWidth(), Mathf.Max(0.7f, bodyBox.size.y * 0.75f), Mathf.Max(0.8f, hitDistance * 1.2f));
         }
         else
         {
             hitboxCollider.center = new Vector3(0f, 0.8f, 1.1f);
-            hitboxCollider.size = new Vector3(0.75f, 1f, Mathf.Max(0.8f, hitDistance * 1.2f));
+            hitboxCollider.size = new Vector3(GetConfiguredChargeHitboxWidth(), 1f, Mathf.Max(0.8f, hitDistance * 1.2f));
         }
         chargeHitbox = hitboxObject.GetComponent<BullChargeHitbox>();
         if (chargeHitbox == null)

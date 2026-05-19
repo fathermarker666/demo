@@ -53,8 +53,12 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private bool frontendBlocked;
     private Coroutine actionRumbleRoutine;
 
+    public static BullfightPauseSettingsUI Instance { get; private set; }
+    public bool IsPauseMenuOpen => menuOpen;
+
     private void Awake()
     {
+        Instance = this;
         previousFixedDeltaTime = Time.fixedDeltaTime;
         SceneManager.sceneLoaded += OnSceneLoaded;
         BuildUi();
@@ -65,6 +69,9 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (ReferenceEquals(Instance, this))
+            Instance = null;
+
         SceneManager.sceneLoaded -= OnSceneLoaded;
         if (menuOpen)
             ResumeGameplay();
@@ -200,18 +207,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             TextAnchor.MiddleRight,
             Vector2.zero,
             new Vector2(300f, 44f));
-        AnchorToMiddleRight(toggleHintLabel.rectTransform, new Vector2(-40f, 0f));
-
-        helpLabel = CreateText(
-            canvasObject.transform,
-            "Help",
-            string.Empty,
-            20,
-            FontStyle.Normal,
-            TextAnchor.MiddleCenter,
-            Vector2.zero,
-            new Vector2(1240f, 70f));
-        AnchorToTopCenter(helpLabel.rectTransform, new Vector2(0f, -46f));
+        AnchorToMiddleRight(toggleHintLabel.rectTransform, new Vector2(-40f, -212f));
 
         panelRoot = CreatePanel(canvasObject.transform, "SettingsPanel", new Color(0.08f, 0.02f, 0.02f, 0.92f), new Vector2(1500f, 700f));
         RectTransform panelRect = panelRoot.GetComponent<RectTransform>();
@@ -225,6 +221,16 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         CreateVolumeColumn(panelRoot.transform, "BGM", "BGM", "Left Stick / W,S", new Vector2(-470f, -18f), out bgmFillRect, out bgmValueLabel);
         CreateActionColumn(panelRoot.transform, new Vector2(0f, -20f));
         CreateVolumeColumn(panelRoot.transform, "SFX", "SFX", "Right Stick / Up,Down", new Vector2(470f, -18f), out sfxFillRect, out sfxValueLabel);
+
+        helpLabel = CreateText(
+            panelRoot.transform,
+            "Help",
+            string.Empty,
+            18,
+            FontStyle.Normal,
+            TextAnchor.MiddleCenter,
+            new Vector2(0f, -294f),
+            new Vector2(820f, 84f));
 
         controlsOverlayRoot = CreatePanel(canvasObject.transform, "ControlsOverlay", new Color(0f, 0f, 0f, 0.82f), Vector2.zero);
         StretchToFullScreen(controlsOverlayRoot.GetComponent<RectTransform>());

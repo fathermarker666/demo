@@ -469,6 +469,7 @@ public partial class BullfightHudController
         if (arcadeComboMode == ArcadeComboDisplayMode.Carry && arcadeComboTransientTimer > 0f)
         {
             arcadeComboRoot.gameObject.SetActive(true);
+            arcadeComboHeader.gameObject.SetActive(true);
             arcadeComboHeader.text = "CARRY OVER";
             arcadeComboValue.text = arcadeComboTransientValue;
             arcadeComboValue.color = bullBossGold;
@@ -480,6 +481,7 @@ public partial class BullfightHudController
         if (arcadeComboMode == ArcadeComboDisplayMode.Break && arcadeComboTransientTimer > 0f)
         {
             arcadeComboRoot.gameObject.SetActive(true);
+            arcadeComboHeader.gameObject.SetActive(true);
             arcadeComboHeader.text = "COMBO BREAK";
             arcadeComboValue.text = arcadeComboTransientValue;
             arcadeComboValue.color = new Color(0.74f, 0.74f, 0.74f, 1f);
@@ -498,8 +500,9 @@ public partial class BullfightHudController
 
         arcadeComboMode = ArcadeComboDisplayMode.Normal;
         arcadeComboRoot.gameObject.SetActive(true);
-        arcadeComboHeader.text = "COMBO";
-        arcadeComboValue.text = $"STREAK {arcadeState.ComboCount}";
+        arcadeComboHeader.gameObject.SetActive(false);
+        arcadeComboHeader.text = string.Empty;
+        arcadeComboValue.text = $"COMBO {arcadeState.ComboCount}";
         arcadeComboValue.color = bullBossTitleColor;
         arcadeComboStreak.text = $"x{arcadeState.ComboMultiplier:0.00}";
         arcadeComboStreak.color = bullBossGold;
@@ -693,17 +696,35 @@ public partial class BullfightHudController
         activeArcadeRunSummaryTimer += Time.unscaledDeltaTime;
         arcadeFinalResultRoot.gameObject.SetActive(true);
 
+        bool isNumberOneCelebration = activeArcadeRunSummaryHud.IsNewRecord && activeArcadeRunSummaryHud.IsRanked;
+        Color panelColor = isNumberOneCelebration
+            ? new Color(0.80f, 0.62f, 0.10f, 0.985f)
+            : new Color(0.15f, 0.04f, 0.04f, 0.97f);
+        Color textColor = isNumberOneCelebration ? Color.white : bullBossTitleColor;
+        Color scoreColor = isNumberOneCelebration ? Color.white : bullBossGold;
+
+        arcadeFinalResultPanel.color = panelColor;
+
         if (arcadeFinalResultTitle != null)
+        {
             arcadeFinalResultTitle.text = activeArcadeRunSummaryHud.EndingTitle;
+            arcadeFinalResultTitle.color = textColor;
+        }
 
         if (arcadeFinalResultBanner != null)
         {
             arcadeFinalResultBanner.gameObject.SetActive(activeArcadeRunSummaryHud.IsNewRecord);
-            arcadeFinalResultBanner.text = "NEW RECORD";
+            arcadeFinalResultBanner.text = isNumberOneCelebration ? "YOU ARE NO.1!" : "NEW RECORD";
+            arcadeFinalResultBanner.color = isNumberOneCelebration ? Color.white : bullBossGold;
+            arcadeFinalResultBanner.fontSize = isNumberOneCelebration ? 42 : 34;
         }
 
         if (arcadeFinalResultScoreValue != null)
+        {
             arcadeFinalResultScoreValue.text = FormatArcadeScore(activeArcadeRunSummaryHud.FinalScore);
+            arcadeFinalResultScoreValue.color = scoreColor;
+            arcadeFinalResultScoreValue.fontSize = isNumberOneCelebration ? 176 : 162;
+        }
 
         SetFinalResultRow(0, $"HIGH SCORE      {FormatArcadeScore(activeArcadeRunSummaryHud.NewHighScore)}");
         SetFinalResultRow(1, $"MAX COMBO       x{activeArcadeRunSummaryHud.MaxComboMultiplier:0.00} / {activeArcadeRunSummaryHud.MaxComboCount}");
@@ -712,11 +733,20 @@ public partial class BullfightHudController
         SetFinalResultRow(4, $"CLEAR BONUS     {FormatArcadeSignedScore(activeArcadeRunSummaryHud.ClearBonusSubtotal)}");
         SetFinalResultRow(5, $"RANKING         {activeArcadeRunSummaryHud.RankingStatusText}");
 
+        for (int index = 0; index < arcadeFinalResultRows.Length; index++)
+        {
+            if (arcadeFinalResultRows[index] == null)
+                continue;
+
+            arcadeFinalResultRows[index].color = textColor;
+        }
+
         if (arcadeFinalResultHint != null)
         {
             bool canDismiss = activeArcadeRunSummaryTimer >= 2.5f;
             arcadeFinalResultHint.gameObject.SetActive(true);
-            arcadeFinalResultHint.text = canDismiss ? "Click / Enter / A 繼續" : "結算中...";
+            arcadeFinalResultHint.color = textColor;
+            arcadeFinalResultHint.text = canDismiss ? "Click / Enter / A \u7e7c\u7e8c" : "\u7d50\u7b97\u4e2d...";
         }
 
         bool dismissRequested = activeArcadeRunSummaryTimer >= 2.5f && WasArcadeConfirmRequestedThisFrame();
@@ -769,7 +799,7 @@ public partial class BullfightHudController
         ConfigureArcadeText(arcadeScoreLabel, new Vector2(22f, -84f), new Vector2(180f, 24f), TextAnchor.MiddleLeft, 20, bullBossGold, FontStyle.Bold, "SCORE");
 
         arcadeScoreValue = GetOrCreateUiText(arcadeScoreRoot, "ScoreValue");
-        ConfigureArcadeText(arcadeScoreValue, new Vector2(20f, -120f), new Vector2(372f, 60f), TextAnchor.MiddleLeft, 42, bullBossTitleColor, FontStyle.Bold, FormatArcadeScore(0));
+        ConfigureArcadeText(arcadeScoreValue, new Vector2(20f, -108f), new Vector2(372f, 60f), TextAnchor.MiddleLeft, 42, bullBossTitleColor, FontStyle.Bold, FormatArcadeScore(0));
 
         arcadeEligibilityPill = GetOrCreateUiImage(arcadeScoreRoot, "EligibilityPill");
         RectTransform pillRect = arcadeEligibilityPill.rectTransform;
@@ -793,7 +823,7 @@ public partial class BullfightHudController
         arcadePhaseTimerRoot.anchorMin = new Vector2(0.5f, 1f);
         arcadePhaseTimerRoot.anchorMax = new Vector2(0.5f, 1f);
         arcadePhaseTimerRoot.pivot = new Vector2(0.5f, 1f);
-        arcadePhaseTimerRoot.anchoredPosition = new Vector2(0f, -42f);
+        arcadePhaseTimerRoot.anchoredPosition = new Vector2(0f, -110f);
         arcadePhaseTimerRoot.sizeDelta = new Vector2(214f, 54f);
 
         arcadePhaseTimerPanel = GetOrCreateUiImage(arcadePhaseTimerRoot, "Background");
@@ -825,7 +855,7 @@ public partial class BullfightHudController
         ConfigureArcadeText(arcadeComboHeader, new Vector2(0f, -18f), new Vector2(280f, 28f), TextAnchor.MiddleCenter, 22, bullBossGold, FontStyle.Bold, "COMBO");
 
         arcadeComboValue = GetOrCreateUiText(arcadeComboRoot, "Value");
-        ConfigureArcadeText(arcadeComboValue, new Vector2(0f, -64f), new Vector2(330f, 58f), TextAnchor.MiddleCenter, 34, bullBossTitleColor, FontStyle.Bold, "STREAK 1");
+        ConfigureArcadeText(arcadeComboValue, new Vector2(0f, -54f), new Vector2(330f, 58f), TextAnchor.MiddleCenter, 36, bullBossTitleColor, FontStyle.Bold, "COMBO 1");
 
         arcadeComboStreak = GetOrCreateUiText(arcadeComboRoot, "Streak");
         ConfigureArcadeText(arcadeComboStreak, new Vector2(0f, -112f), new Vector2(300f, 28f), TextAnchor.MiddleCenter, 22, bullBossGold, FontStyle.Bold, "x1.00");
@@ -937,38 +967,43 @@ public partial class BullfightHudController
         {
             arcadeFinalResultRoot = GetOrCreateUiRect(hudCanvasRect, "ArcadeFinalResultPanel");
             StretchToFullScreen(arcadeFinalResultRoot);
-            arcadeFinalResultRoot.offsetMin = new Vector2(80f, 60f);
-            arcadeFinalResultRoot.offsetMax = new Vector2(-80f, -60f);
+            arcadeFinalResultRoot.offsetMin = new Vector2(40f, 28f);
+            arcadeFinalResultRoot.offsetMax = new Vector2(-40f, -28f);
 
             arcadeFinalResultPanel = GetOrCreateUiImage(arcadeFinalResultRoot, "Background");
             StretchToFillParent(arcadeFinalResultPanel.rectTransform);
             arcadeFinalResultPanel.color = new Color(0.15f, 0.04f, 0.04f, 0.97f);
 
             arcadeFinalResultTitle = GetOrCreateUiText(arcadeFinalResultRoot, "Title");
-            ConfigureArcadeText(arcadeFinalResultTitle, new Vector2(0f, -48f), new Vector2(820f, 48f), TextAnchor.MiddleCenter, 38, bullBossTitleColor, FontStyle.Bold, "ARCADE RESULT");
+            ConfigureArcadeText(arcadeFinalResultTitle, new Vector2(0f, -52f), new Vector2(920f, 56f), TextAnchor.MiddleCenter, 44, bullBossTitleColor, FontStyle.Bold, "ARCADE RESULT");
 
             arcadeFinalResultBanner = GetOrCreateUiText(arcadeFinalResultRoot, "Banner");
-            ConfigureArcadeText(arcadeFinalResultBanner, new Vector2(0f, -98f), new Vector2(320f, 30f), TextAnchor.MiddleCenter, 24, new Color(1f, 0.95f, 0.4f, 1f), FontStyle.Bold, "NEW RECORD");
+            ConfigureArcadeText(arcadeFinalResultBanner, new Vector2(0f, -118f), new Vector2(620f, 42f), TextAnchor.MiddleCenter, 34, new Color(1f, 0.95f, 0.4f, 1f), FontStyle.Bold, "NEW RECORD");
 
             arcadeFinalResultScoreValue = GetOrCreateUiText(arcadeFinalResultRoot, "FinalScore");
-            ConfigureArcadeText(arcadeFinalResultScoreValue, new Vector2(0f, -202f), new Vector2(900f, 110f), TextAnchor.MiddleCenter, 86, bullBossGold, FontStyle.Bold, FormatArcadeScore(0));
+            ConfigureArcadeText(arcadeFinalResultScoreValue, new Vector2(0f, -224f), new Vector2(1320f, 196f), TextAnchor.MiddleCenter, 158, bullBossGold, FontStyle.Bold, FormatArcadeScore(0));
+            Outline finalScoreOutline = arcadeFinalResultScoreValue.GetComponent<Outline>();
+            if (finalScoreOutline == null)
+                finalScoreOutline = arcadeFinalResultScoreValue.gameObject.AddComponent<Outline>();
+            finalScoreOutline.effectColor = new Color(0.16f, 0.05f, 0.02f, 0.92f);
+            finalScoreOutline.effectDistance = new Vector2(4f, -4f);
 
             for (int index = 0; index < arcadeFinalResultRows.Length; index++)
             {
                 arcadeFinalResultRows[index] = GetOrCreateUiText(arcadeFinalResultRoot, $"Row{index + 1}");
                 ConfigureArcadeText(
                     arcadeFinalResultRows[index],
-                    new Vector2(0f, -332f - (index * 52f)),
-                    new Vector2(860f, 36f),
+                    new Vector2(0f, -502f - (index * 52f)),
+                    new Vector2(920f, 40f),
                     TextAnchor.MiddleCenter,
-                    28,
+                    32,
                     bullBossTitleColor,
                     FontStyle.Bold,
                     string.Empty);
             }
 
             arcadeFinalResultHint = GetOrCreateUiText(arcadeFinalResultRoot, "Hint");
-            ConfigureArcadeText(arcadeFinalResultHint, new Vector2(0f, -628f), new Vector2(620f, 28f), TextAnchor.MiddleCenter, 22, bullBossTitleColor, FontStyle.Italic, "結算中...");
+            ConfigureArcadeText(arcadeFinalResultHint, new Vector2(0f, -796f), new Vector2(720f, 32f), TextAnchor.MiddleCenter, 24, bullBossTitleColor, FontStyle.Italic, "\u7d50\u7b97\u4e2d...");
             arcadeFinalResultRoot.gameObject.SetActive(false);
         }
 
