@@ -15,6 +15,7 @@ public class PlayerStats : MonoBehaviour
     public event Action<float> OnDamaged;
     public event Action<bool> OnHoldingClothChanged;
     public event Action<bool> OnStunStateChanged;
+    public event Action<bool> OnBullChargeLockStateChanged;
     public event Action<bool> OnPerfectDodgeBuffStateChanged;
 
     [Header("Health")]
@@ -171,11 +172,10 @@ public class PlayerStats : MonoBehaviour
 
     private void Start()
     {
-        // Âº∑Âà∂?çÊ¨°?°Ê??∏ÂÄ?
+        // Ensure gameplay state starts from full resources.
         currentHealth = maxHealth;
         currentStamina = maxStamina;
 
-        // Á´ãÂç≥?¥Êñ∞‰∏ÄÊ¨?UI
         UpdateUI();
 
     }
@@ -312,7 +312,7 @@ public class PlayerStats : MonoBehaviour
         if (bullChargeLocked == nextValue)
             return;
 
-        bullChargeLocked = nextValue;
+        SetBullChargeLockStateInternal(nextValue);
         if (bullChargeLocked)
         {
             isActing = false;
@@ -391,6 +391,7 @@ public class PlayerStats : MonoBehaviour
         TakeDamage(amount);
         if (currentHealth >= previousHealth) return;
         ApplyKnockback(impactSource, knockbackDistance, knockbackDuration);
+        stunVfx?.TriggerBullImpactBurst();
         ForceStun();
     }
 
@@ -436,7 +437,7 @@ public class PlayerStats : MonoBehaviour
         isActing = false;
         isTaunting = false;
         isStunned = false;
-        bullChargeLocked = false;
+        SetBullChargeLockStateInternal(false);
 
         if (refillHealth)
             currentHealth = maxHealth;
@@ -689,11 +690,9 @@ public class PlayerStats : MonoBehaviour
     }
     private void UpdateUI()
     {
-        // ?¥Êñ∞Ë°ÄÊ¢ùÁôæ?ÜÊ? (0.0 ~ 1.0)
         if (healthBar != null)
             healthBar.value = HealthNormalized;
 
-        // ?¥Êñ∞È´îÂ?Ê¢ùÁôæ?ÜÊ? (0.0 ~ 1.0)
         if (staminaBar != null)
             staminaBar.value = StaminaNormalized;
     }
@@ -714,7 +713,7 @@ public class PlayerStats : MonoBehaviour
         currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
         isActing = false;
         isStunned = false;
-        bullChargeLocked = false;
+        SetBullChargeLockStateInternal(false);
         SetHoldingCloth(false);
         StopMovementImmediate();
         SetShooterControlEnabled(false);
@@ -731,6 +730,15 @@ public class PlayerStats : MonoBehaviour
 
         if (logDebug)
             Debug.Log("Debug shortcut: player health forced to 0.");
+    }
+
+    private void SetBullChargeLockStateInternal(bool nextValue)
+    {
+        if (bullChargeLocked == nextValue)
+            return;
+
+        bullChargeLocked = nextValue;
+        OnBullChargeLockStateChanged?.Invoke(nextValue);
     }
 
     private void CachePresentationReferences()

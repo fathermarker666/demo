@@ -18,6 +18,16 @@ public class BullfightStunVfx : MonoBehaviour
     [SerializeField] private float lowHealthOverlayAlpha = 0.18f;
     [SerializeField] private Color lowHealthColor = new Color(0.92f, 0.22f, 0.22f, 1f);
 
+    [Header("Charge Lock Warning")]
+    [SerializeField] private Color chargeLockColor = new Color(1f, 0.5f, 0.12f, 1f);
+    [SerializeField] private float chargeLockFadeSpeed = 9.5f;
+    [SerializeField] private float chargeLockGrayAlpha = 0.16f;
+    [SerializeField] private float chargeLockOverlayAlpha = 0.19f;
+    [SerializeField] private float chargeLockVignetteAlpha = 0.42f;
+    [SerializeField] private float chargeLockPulseFrequency = 1.8f;
+    [SerializeField] private float chargeLockFovPull = 3.35f;
+    [SerializeField] private float chargeLockFovWave = 1.55f;
+
     [Header("Dizzy Feel")]
     [SerializeField] private float lingerDuration = 1.7f;
     [SerializeField] private float pulseFrequency = 2.1f;
@@ -28,51 +38,67 @@ public class BullfightStunVfx : MonoBehaviour
     [SerializeField] private float cameraFovWave = 7f;
     [SerializeField] private float cameraFovRecoverSpeed = 6f;
 
+    [Header("Impact Burst")]
+    [SerializeField] private Color impactBurstColor = new Color(1f, 0.12f, 0.02f, 1f);
+    [SerializeField] private float impactBurstDuration = 0.95f;
+    [SerializeField] private float impactBurstFlashAlpha = 0.92f;
+    [SerializeField] private float impactBurstGrayBoost = 0.18f;
+    [SerializeField] private float impactBurstVignetteBoost = 0.48f;
+    [SerializeField] private float impactBurstShockDuration = 1.05f;
+    [SerializeField] private float impactBurstLingerDuration = 2.15f;
+    [SerializeField] private float impactBurstFovKick = 22f;
+    [SerializeField] private float impactBurstFovWave = 12.5f;
+    [SerializeField] private float impactBurstPulseFrequency = 7.2f;
+
     [Header("Overlay Layout")]
     [SerializeField] private int overlaySortingOrder = 5000;
     [SerializeField] private Vector2 overlayReferenceResolution = new Vector2(1920f, 1080f);
     [SerializeField, Range(64, 1024)] private int vignetteTextureSize = 256;
     private Canvas overlayCanvas;
     private Image grayOverlay;
+    private Image warningOverlay;
     private Image damageOverlay;
     private Image lowHealthOverlay;
     private RawImage vignetteOverlay;
     private RectTransform vignetteRect;
     private float currentWeight;
+    private float chargeLockWeight;
     private float damageFlashWeight;
     private Texture2D vignetteTexture;
     private float lingerTimer;
     private float shockTimer;
+    private float impactBurstTimer;
     private float effectTime;
-    private bool wasStunnedLastFrame;
+    private bool stunActive;
+    private bool chargeLockActive;
     private Camera worldCamera;
     private float baseFieldOfView;
     private bool hasBaseFieldOfView;
+    private PlayerStats subscribedPlayerStats;
 
     private void Awake()
     {
         ResolveReferencesIfNeeded();
         EnsureOverlay();
+        SyncStateFromPlayer(true);
     }
 
     private void OnEnable()
     {
         ResolveReferencesIfNeeded();
+        SyncStateFromPlayer(true);
     }
 
     private void Update()
     {
-        if (playerStats == null)
+        if (playerStats == null || subscribedPlayerStats != playerStats)
             ResolveReferencesIfNeeded();
 
-        bool isStunned = playerStats != null && playerStats.isStunned;
-        UpdateStunState(isStunned);
-
-        float target = GetTargetWeight(isStunned);
-        currentWeight = Mathf.MoveTowards(currentWeight, target, Time.unscaledDeltaTime * fadeSpeed);
+        UpdateStateWeights();
         damageFlashWeight = Mathf.MoveTowards(damageFlashWeight, 0f, Time.unscaledDeltaTime * damageFlashFadeSpeed);
         shockTimer = Mathf.Max(0f, shockTimer - Time.unscaledDeltaTime);
-        effectTime = currentWeight > 0.001f ? effectTime + Time.unscaledDeltaTime : 0f;
+        impactBurstTimer = Mathf.Max(0f, impactBurstTimer - Time.unscaledDeltaTime);
+        effectTime = HasActivePresentation() ? effectTime + Time.unscaledDeltaTime : 0f;
 
         ApplyWeight();
         ApplyDistortion();
@@ -102,6 +128,13 @@ public class BullfightStunVfx : MonoBehaviour
         grayOverlay.color = new Color(0.5f, 0.5f, 0.5f, 0f);
         StretchFullScreen(grayOverlay.rectTransform);
 
+        GameObject warning = new GameObject("ChargeLockOverlay");
+        warning.transform.SetParent(root.transform, false);
+        warningOverlay = warning.AddComponent<Image>();
+        warningOverlay.raycastTarget = false;
+        warningOverlay.color = new Color(chargeLockColor.r, chargeLockColor.g, chargeLockColor.b, 0f);
+        StretchFullScreen(warningOverlay.rectTransform);
+
         GameObject damage = new GameObject("DamageOverlay");
         damage.transform.SetParent(root.transform, false);
         damageOverlay = damage.AddComponent<Image>();
@@ -130,16 +163,34 @@ public class BullfightStunVfx : MonoBehaviour
     private void ApplyWeight()
     {
         float shockWeight = GetShockWeight();
-        float pulse = GetPulse01();
-        float visualWeight = Mathf.Clamp01(currentWeight + shockWeight * 0.2f);
-        float boostedGrayAlpha = grayAlpha * Mathf.Lerp(1f, 1.28f, pulse) * Mathf.Lerp(1f, 1.35f, shockWeight);
-        float boostedVignetteAlpha = vignetteAlpha * Mathf.Lerp(1f, 1.35f, pulse) * Mathf.Lerp(1f, 1.5f, shockWeight);
+        float stunPulse = GetPulse01();
+        float warningPulse = GetChargeLockPulse01();
+        float impactWeight = GetImpactBurstWeight();
+        float impactPulse = GetImpactBurstPulse01();
+        float stunVisualWeight = Mathf.Clamp01(currentWeight + (shockWeight * 0.22f));
+        float warningVisualWeight = chargeLockWeight * (0.82f + (0.18f * warningPulse));
+        float boostedGrayAlpha = grayAlpha * Mathf.Lerp(1f, 1.28f, stunPulse) * Mathf.Lerp(1f, 1.35f, shockWeight);
+        float boostedVignetteAlpha = vignetteAlpha * Mathf.Lerp(1f, 1.35f, stunPulse) * Mathf.Lerp(1f, 1.5f, shockWeight);
+        float grayCompositeAlpha = Mathf.Clamp01(
+            (boostedGrayAlpha * stunVisualWeight) +
+            (chargeLockGrayAlpha * warningVisualWeight) +
+            (impactBurstGrayBoost * impactWeight * (0.8f + (0.2f * impactPulse))));
 
         if (grayOverlay != null)
-            grayOverlay.color = new Color(0.5f, 0.5f, 0.5f, boostedGrayAlpha * visualWeight);
+            grayOverlay.color = new Color(0.5f, 0.5f, 0.5f, grayCompositeAlpha);
+
+        if (warningOverlay != null)
+        {
+            float warningAlpha = chargeLockOverlayAlpha * warningVisualWeight;
+            warningOverlay.color = new Color(chargeLockColor.r, chargeLockColor.g, chargeLockColor.b, warningAlpha);
+        }
 
         if (damageOverlay != null)
-            damageOverlay.color = new Color(0.9f, 0.1f, 0.1f, damageFlashAlpha * damageFlashWeight);
+        {
+            float flashAlpha = Mathf.Clamp01((damageFlashAlpha * Mathf.Clamp01(damageFlashWeight)) + (impactBurstFlashAlpha * impactWeight * (0.82f + (0.18f * impactPulse))));
+            Color flashColor = Color.Lerp(new Color(1f, 0.42f, 0.16f, 1f), impactBurstColor, Mathf.Clamp01(impactWeight * 1.15f));
+            damageOverlay.color = new Color(flashColor.r, flashColor.g, flashColor.b, flashAlpha);
+        }
 
         if (lowHealthOverlay != null)
         {
@@ -151,14 +202,29 @@ public class BullfightStunVfx : MonoBehaviour
         }
 
         if (vignetteOverlay != null)
-            vignetteOverlay.color = new Color(0f, 0f, 0f, boostedVignetteAlpha * visualWeight);
+        {
+            float warningAlpha = chargeLockVignetteAlpha * warningVisualWeight;
+            float stunAlpha = boostedVignetteAlpha * stunVisualWeight;
+            float impactAlpha = impactBurstVignetteBoost * impactWeight * (0.84f + (0.16f * impactPulse));
+            ApplyCompositeVignette(warningAlpha, stunAlpha, impactAlpha, impactWeight);
+        }
     }
 
     public void TriggerDamageFlash()
     {
-        damageFlashWeight = 1f;
-        if (damageOverlay != null)
-            damageOverlay.transform.SetAsLastSibling();
+        damageFlashWeight = Mathf.Max(damageFlashWeight, 1f);
+        PromoteDamageOverlay();
+        ApplyWeight();
+    }
+
+    public void TriggerBullImpactBurst()
+    {
+        damageFlashWeight = Mathf.Max(damageFlashWeight, 1.35f);
+        impactBurstTimer = Mathf.Max(impactBurstTimer, impactBurstDuration);
+        shockTimer = Mathf.Max(shockTimer, impactBurstShockDuration);
+        lingerTimer = Mathf.Max(lingerTimer, impactBurstLingerDuration);
+        effectTime = 0f;
+        PromoteDamageOverlay();
         ApplyWeight();
     }
 
@@ -192,27 +258,87 @@ public class BullfightStunVfx : MonoBehaviour
     {
         if (playerStats == null)
             playerStats = BullfightSceneCache.GetLocalOrScene<PlayerStats>(this);
+
+        if (subscribedPlayerStats != playerStats)
+            ResubscribePlayerEvents();
     }
 
-    private void UpdateStunState(bool isStunned)
+    private void ResubscribePlayerEvents()
     {
-        if (isStunned)
+        if (subscribedPlayerStats != null)
         {
-            lingerTimer = lingerDuration;
-            if (!wasStunnedLastFrame)
-                shockTimer = shockDuration;
+            subscribedPlayerStats.OnStunStateChanged -= HandleStunStateChanged;
+            subscribedPlayerStats.OnBullChargeLockStateChanged -= HandleBullChargeLockStateChanged;
         }
+
+        subscribedPlayerStats = playerStats;
+
+        if (subscribedPlayerStats != null)
+        {
+            subscribedPlayerStats.OnStunStateChanged += HandleStunStateChanged;
+            subscribedPlayerStats.OnBullChargeLockStateChanged += HandleBullChargeLockStateChanged;
+        }
+
+        SyncStateFromPlayer(false);
+    }
+
+    private void SyncStateFromPlayer(bool snapWeights)
+    {
+        bool nextStunState = subscribedPlayerStats != null && !subscribedPlayerStats.IsDead && subscribedPlayerStats.isStunned;
+        bool nextChargeLockState = subscribedPlayerStats != null && !subscribedPlayerStats.IsDead && subscribedPlayerStats.IsBullChargeLocked;
+
+        stunActive = nextStunState;
+        chargeLockActive = nextChargeLockState;
+
+        if (stunActive)
+        {
+            lingerTimer = Mathf.Max(lingerTimer, lingerDuration);
+            if (snapWeights)
+                currentWeight = Mathf.Max(currentWeight, 1f);
+        }
+
+        if (chargeLockActive && snapWeights)
+            chargeLockWeight = Mathf.Max(chargeLockWeight, 1f);
+    }
+
+    private void HandleStunStateChanged(bool isStunned)
+    {
+        if (stunActive == isStunned)
+            return;
+
+        stunActive = isStunned;
+        if (!stunActive)
+            return;
+
+        lingerTimer = Mathf.Max(lingerTimer, lingerDuration);
+        shockTimer = Mathf.Max(shockTimer, shockDuration);
+        effectTime = 0f;
+    }
+
+    private void HandleBullChargeLockStateChanged(bool active)
+    {
+        if (chargeLockActive == active)
+            return;
+
+        chargeLockActive = active;
+        if (chargeLockActive)
+            effectTime = 0f;
+    }
+
+    private void UpdateStateWeights()
+    {
+        if (stunActive)
+            lingerTimer = Mathf.Max(lingerTimer, lingerDuration);
         else if (lingerTimer > 0f)
-        {
             lingerTimer = Mathf.Max(0f, lingerTimer - Time.unscaledDeltaTime);
-        }
 
-        wasStunnedLastFrame = isStunned;
+        currentWeight = Mathf.MoveTowards(currentWeight, GetStunTargetWeight(), Time.unscaledDeltaTime * fadeSpeed);
+        chargeLockWeight = Mathf.MoveTowards(chargeLockWeight, GetChargeLockTargetWeight(), Time.unscaledDeltaTime * chargeLockFadeSpeed);
     }
 
-    private float GetTargetWeight(bool isStunned)
+    private float GetStunTargetWeight()
     {
-        if (isStunned)
+        if (stunActive)
             return 1f;
 
         if (lingerDuration <= 0f)
@@ -221,30 +347,47 @@ public class BullfightStunVfx : MonoBehaviour
         return Mathf.Clamp01(lingerTimer / lingerDuration) * 0.9f;
     }
 
+    private float GetChargeLockTargetWeight()
+    {
+        return chargeLockActive && !stunActive ? 1f : 0f;
+    }
+
     private void ApplyDistortion()
     {
         float shockWeight = GetShockWeight();
-        float pulse = GetPulseSigned();
-        float visualWeight = Mathf.Clamp01(currentWeight + shockWeight * shockStrength);
+        float stunPulse = GetPulseSigned();
+        float warningPulse = GetChargeLockPulseSigned();
+        float impactWeight = GetImpactBurstWeight();
+        float impactPulse = GetImpactBurstPulseSigned();
+        float stunVisualWeight = Mathf.Clamp01(currentWeight + (shockWeight * shockStrength));
 
-        ApplyCameraFov(visualWeight, pulse, shockWeight);
+        ApplyCameraFov(stunVisualWeight, stunPulse, shockWeight, warningPulse, impactWeight, impactPulse);
     }
 
-    private void ApplyCameraFov(float visualWeight, float pulse, float shockWeight)
+    private void ApplyCameraFov(float stunVisualWeight, float stunPulse, float shockWeight, float warningPulse, float impactWeight, float impactPulse)
     {
         EnsureCameraReference();
         if (worldCamera == null || !hasBaseFieldOfView)
             return;
 
         float targetFov = baseFieldOfView;
-        if (visualWeight > 0.001f)
+        if (chargeLockWeight > 0.001f)
         {
-            float targetOffset = (cameraFovKick * visualWeight) + (cameraFovWave * currentWeight * Mathf.Abs(pulse)) + (cameraFovWave * 0.6f * shockWeight);
+            targetFov -= chargeLockFovPull * chargeLockWeight;
+            targetFov += chargeLockFovWave * chargeLockWeight * Mathf.Abs(warningPulse);
+        }
+
+        if (stunVisualWeight > 0.001f)
+        {
+            float targetOffset = (cameraFovKick * stunVisualWeight) + (cameraFovWave * currentWeight * Mathf.Abs(stunPulse)) + (cameraFovWave * 0.6f * shockWeight);
             targetFov += targetOffset;
         }
 
+        if (impactWeight > 0.001f)
+            targetFov += (impactBurstFovKick * impactWeight) + (impactBurstFovWave * impactWeight * (0.65f + (0.35f * Mathf.Abs(impactPulse))));
+
         float nextFov = Mathf.Lerp(worldCamera.fieldOfView, targetFov, Time.unscaledDeltaTime * cameraFovRecoverSpeed);
-        if (visualWeight <= 0.001f && Mathf.Abs(nextFov - baseFieldOfView) <= 0.01f)
+        if (!HasActivePresentation() && Mathf.Abs(nextFov - baseFieldOfView) <= 0.01f)
             nextFov = baseFieldOfView;
 
         worldCamera.fieldOfView = nextFov;
@@ -283,30 +426,122 @@ public class BullfightStunVfx : MonoBehaviour
         return Mathf.Sin(effectTime * pulseFrequency * Mathf.PI * 2f);
     }
 
+    private float GetChargeLockPulse01()
+    {
+        return 0.5f + (0.5f * GetChargeLockPulseSigned());
+    }
+
+    private float GetChargeLockPulseSigned()
+    {
+        return Mathf.Sin(effectTime * chargeLockPulseFrequency * Mathf.PI * 2f);
+    }
+
+    private float GetImpactBurstWeight()
+    {
+        if (impactBurstDuration <= 0f)
+            return 0f;
+
+        return Mathf.Clamp01(impactBurstTimer / impactBurstDuration);
+    }
+
+    private float GetImpactBurstPulse01()
+    {
+        return 0.5f + (0.5f * GetImpactBurstPulseSigned());
+    }
+
+    private float GetImpactBurstPulseSigned()
+    {
+        return Mathf.Sin(effectTime * impactBurstPulseFrequency * Mathf.PI * 2f);
+    }
+
+    private bool HasActivePresentation()
+    {
+        return currentWeight > 0.001f ||
+               chargeLockWeight > 0.001f ||
+               damageFlashWeight > 0.001f ||
+               impactBurstTimer > 0.001f;
+    }
+
+    private void ApplyCompositeVignette(float warningAlpha, float stunAlpha, float impactAlpha, float impactWeight)
+    {
+        if (vignetteOverlay == null)
+            return;
+
+        float totalAlpha = Mathf.Clamp01(warningAlpha + stunAlpha + impactAlpha);
+        if (totalAlpha <= 0.001f)
+        {
+            vignetteOverlay.color = new Color(0f, 0f, 0f, 0f);
+            return;
+        }
+
+        Color stunColor = new Color(0.06f, 0.01f, 0.01f, 1f);
+        Color weightedColor =
+            ((chargeLockColor * warningAlpha) +
+             (stunColor * stunAlpha) +
+             (impactBurstColor * (impactAlpha * Mathf.Lerp(0.75f, 1f, impactWeight)))) /
+            Mathf.Max(0.0001f, warningAlpha + stunAlpha + impactAlpha);
+
+        vignetteOverlay.color = new Color(weightedColor.r, weightedColor.g, weightedColor.b, totalAlpha);
+    }
+
+    private void PromoteDamageOverlay()
+    {
+        if (damageOverlay == null || damageOverlay.transform.parent == null)
+            return;
+
+        int desiredIndex = Mathf.Max(0, damageOverlay.transform.parent.childCount - 2);
+        damageOverlay.transform.SetSiblingIndex(desiredIndex);
+    }
+
     private void OnDisable()
     {
+        UnsubscribePlayerEvents();
         ResetPresentation();
     }
 
     private void OnDestroy()
     {
+        UnsubscribePlayerEvents();
         ResetPresentation();
     }
 
     private void ResetPresentation()
     {
         currentWeight = 0f;
+        chargeLockWeight = 0f;
         damageFlashWeight = 0f;
         lingerTimer = 0f;
         shockTimer = 0f;
+        impactBurstTimer = 0f;
         effectTime = 0f;
-        wasStunnedLastFrame = false;
 
         if (vignetteRect != null)
             vignetteRect.localScale = new Vector3(vignetteOverscan, vignetteOverscan, 1f);
 
         if (worldCamera != null && hasBaseFieldOfView)
             worldCamera.fieldOfView = baseFieldOfView;
+
+        if (grayOverlay != null)
+            grayOverlay.color = new Color(0.5f, 0.5f, 0.5f, 0f);
+
+        if (warningOverlay != null)
+            warningOverlay.color = new Color(chargeLockColor.r, chargeLockColor.g, chargeLockColor.b, 0f);
+
+        if (damageOverlay != null)
+            damageOverlay.color = new Color(impactBurstColor.r, impactBurstColor.g, impactBurstColor.b, 0f);
+
+        if (vignetteOverlay != null)
+            vignetteOverlay.color = new Color(0f, 0f, 0f, 0f);
+    }
+
+    private void UnsubscribePlayerEvents()
+    {
+        if (subscribedPlayerStats == null)
+            return;
+
+        subscribedPlayerStats.OnStunStateChanged -= HandleStunStateChanged;
+        subscribedPlayerStats.OnBullChargeLockStateChanged -= HandleBullChargeLockStateChanged;
+        subscribedPlayerStats = null;
     }
 
     private void ApplyVignetteOverscan()
@@ -330,63 +565,93 @@ public class BullfightPerfectDodgeVfx : MonoBehaviour
     [SerializeField] private PlayerStats playerStats;
 
     [Header("Visual")]
-    [SerializeField] private Color overlayColor = new Color(0.18f, 0.72f, 1f, 0.46f);
-    [SerializeField] private float fadeSpeed = 5f;
-    [SerializeField] private float scrollSpeed = 0.32f;
-    [SerializeField] private float pulseSpeed = 2.4f;
-    [SerializeField] private float overscan = 1.12f;
+    [SerializeField] private Color baseFlowColor = new Color(0.16f, 0.74f, 1f, 0.52f);
+    [SerializeField] private Color accentFlowColor = new Color(1f, 0.86f, 0.22f, 0.34f);
+    [SerializeField] private Color burstColor = new Color(0.7f, 0.94f, 1f, 0.68f);
+    [SerializeField] private float fadeSpeed = 5.75f;
+    [SerializeField] private float baseFlowScrollSpeed = 0.3f;
+    [SerializeField] private float accentFlowScrollSpeed = 0.68f;
+    [SerializeField] private float basePulseSpeed = 2.3f;
+    [SerializeField] private float accentPulseSpeed = 4.1f;
+    [SerializeField] private float burstPulseSpeed = 8.6f;
+    [SerializeField] private float baseFlowAlpha = 0.58f;
+    [SerializeField] private float accentFlowAlpha = 0.34f;
+    [SerializeField] private float burstAlpha = 0.92f;
+    [SerializeField] private float burstDuration = 0.24f;
+    [SerializeField] private float overscan = 1.14f;
+    [SerializeField] private float burstOverscan = 1.2f;
 
     [Header("Overlay Layout")]
     [SerializeField] private int overlaySortingOrder = 4900;
     [SerializeField] private Vector2 overlayReferenceResolution = new Vector2(1920f, 1080f);
     [SerializeField, Range(0f, 1f)] private float overlayMatchWidthOrHeight = 0.5f;
     private Canvas overlayCanvas;
-    private RawImage streakOverlay;
-    private RectTransform overlayRect;
-    private Texture2D streakTexture;
+    private RawImage baseFlowOverlay;
+    private RawImage accentFlowOverlay;
+    private RawImage activationBurstOverlay;
+    private RectTransform baseFlowRect;
+    private RectTransform accentFlowRect;
+    private RectTransform activationBurstRect;
+    private Texture2D baseFlowTexture;
+    private Texture2D accentFlowTexture;
+    private Texture2D burstTexture;
     private float currentWeight;
-    private float scrollOffset;
-    private float pulseTime;
+    private float burstTimer;
+    private float baseScrollOffset;
+    private float accentScrollOffset;
+    private float basePulseTime;
+    private float accentPulseTime;
+    private float burstPulseTime;
+    private bool buffActive;
+    private PlayerStats subscribedPlayerStats;
 
     private void Awake()
     {
         ResolveReferencesIfNeeded();
         EnsureOverlay();
+        SyncStateFromPlayer(true);
     }
 
     private void OnEnable()
     {
         ResolveReferencesIfNeeded();
+        SyncStateFromPlayer(true);
     }
 
     private void Update()
     {
-        if (playerStats == null)
+        if (playerStats == null || subscribedPlayerStats != playerStats)
             ResolveReferencesIfNeeded();
 
-        bool active = playerStats != null && playerStats.IsPerfectDodgeBuffActive;
-        currentWeight = Mathf.MoveTowards(currentWeight, active ? 1f : 0f, Time.unscaledDeltaTime * fadeSpeed);
-        if (currentWeight <= 0.001f && streakOverlay != null)
+        currentWeight = Mathf.MoveTowards(currentWeight, buffActive ? 1f : 0f, Time.unscaledDeltaTime * fadeSpeed);
+        burstTimer = Mathf.Max(0f, burstTimer - Time.unscaledDeltaTime);
+        if (currentWeight <= 0.001f && burstTimer <= 0.001f)
         {
-            streakOverlay.color = new Color(overlayColor.r, overlayColor.g, overlayColor.b, 0f);
+            ApplyFlowState(0f, 0f, 0f, 0f, 0f);
             return;
         }
 
-        scrollOffset += Time.unscaledDeltaTime * scrollSpeed;
-        pulseTime += Time.unscaledDeltaTime * pulseSpeed;
-        float pulse = 0.82f + (Mathf.Sin(pulseTime * Mathf.PI * 2f) * 0.18f);
+        baseScrollOffset += Time.unscaledDeltaTime * baseFlowScrollSpeed;
+        accentScrollOffset += Time.unscaledDeltaTime * accentFlowScrollSpeed;
+        basePulseTime += Time.unscaledDeltaTime * basePulseSpeed;
+        accentPulseTime += Time.unscaledDeltaTime * accentPulseSpeed;
+        burstPulseTime += Time.unscaledDeltaTime * burstPulseSpeed;
 
-        if (streakOverlay != null)
-        {
-            streakOverlay.uvRect = new Rect(0f, scrollOffset, 1f, 1.6f);
-            streakOverlay.color = new Color(overlayColor.r, overlayColor.g, overlayColor.b, overlayColor.a * currentWeight * pulse);
-        }
+        float basePulse = 0.84f + (Mathf.Sin(basePulseTime * Mathf.PI * 2f) * 0.16f);
+        float accentPulse = 0.72f + (Mathf.Sin(accentPulseTime * Mathf.PI * 2f) * 0.28f);
+        float burstWeight = burstDuration <= 0f ? 0f : Mathf.Clamp01(burstTimer / burstDuration);
+        float burstPulse = 0.84f + (Mathf.Sin(burstPulseTime * Mathf.PI * 2f) * 0.16f);
+
+        ApplyFlowState(basePulse, accentPulse, burstPulse, baseScrollOffset, accentScrollOffset);
     }
 
     private void ResolveReferencesIfNeeded()
     {
         if (playerStats == null)
             playerStats = BullfightSceneCache.GetLocalOrScene<PlayerStats>(this);
+
+        if (subscribedPlayerStats != playerStats)
+            ResubscribePlayerEvents();
     }
 
     private void EnsureOverlay()
@@ -409,25 +674,123 @@ public class BullfightPerfectDodgeVfx : MonoBehaviour
 
         root.AddComponent<GraphicRaycaster>().enabled = false;
 
-        GameObject overlay = new GameObject("PerfectDodgeFlow");
-        overlay.transform.SetParent(root.transform, false);
-        streakOverlay = overlay.AddComponent<RawImage>();
-        streakOverlay.raycastTarget = false;
-        streakOverlay.texture = CreateStreakTexture();
-        streakOverlay.color = new Color(overlayColor.r, overlayColor.g, overlayColor.b, 0f);
-        overlayRect = streakOverlay.rectTransform;
-        StretchOverlay(overlayRect);
-        overlayRect.localScale = new Vector3(overscan, overscan, 1f);
+        GameObject baseFlow = new GameObject("PerfectDodgeBaseFlow");
+        baseFlow.transform.SetParent(root.transform, false);
+        baseFlowOverlay = baseFlow.AddComponent<RawImage>();
+        baseFlowOverlay.raycastTarget = false;
+        baseFlowOverlay.texture = CreateBaseFlowTexture();
+        baseFlowOverlay.color = new Color(baseFlowColor.r, baseFlowColor.g, baseFlowColor.b, 0f);
+        baseFlowRect = baseFlowOverlay.rectTransform;
+        StretchOverlay(baseFlowRect);
+        baseFlowRect.localScale = new Vector3(overscan, overscan, 1f);
+
+        GameObject accentFlow = new GameObject("PerfectDodgeAccentFlow");
+        accentFlow.transform.SetParent(root.transform, false);
+        accentFlowOverlay = accentFlow.AddComponent<RawImage>();
+        accentFlowOverlay.raycastTarget = false;
+        accentFlowOverlay.texture = CreateAccentFlowTexture();
+        accentFlowOverlay.color = new Color(accentFlowColor.r, accentFlowColor.g, accentFlowColor.b, 0f);
+        accentFlowRect = accentFlowOverlay.rectTransform;
+        StretchOverlay(accentFlowRect);
+        accentFlowRect.localScale = new Vector3(overscan, overscan, 1f);
+
+        GameObject burstFlow = new GameObject("PerfectDodgeActivationBurst");
+        burstFlow.transform.SetParent(root.transform, false);
+        activationBurstOverlay = burstFlow.AddComponent<RawImage>();
+        activationBurstOverlay.raycastTarget = false;
+        activationBurstOverlay.texture = CreateBurstTexture();
+        activationBurstOverlay.color = new Color(burstColor.r, burstColor.g, burstColor.b, 0f);
+        activationBurstRect = activationBurstOverlay.rectTransform;
+        StretchOverlay(activationBurstRect);
+        activationBurstRect.localScale = new Vector3(burstOverscan, burstOverscan, 1f);
     }
 
-    private Texture2D CreateStreakTexture()
+    private void ResubscribePlayerEvents()
     {
-        if (streakTexture != null)
-            return streakTexture;
+        if (subscribedPlayerStats != null)
+            subscribedPlayerStats.OnPerfectDodgeBuffStateChanged -= HandlePerfectDodgeBuffStateChanged;
+
+        subscribedPlayerStats = playerStats;
+        if (subscribedPlayerStats != null)
+            subscribedPlayerStats.OnPerfectDodgeBuffStateChanged += HandlePerfectDodgeBuffStateChanged;
+
+        SyncStateFromPlayer(false);
+    }
+
+    private void SyncStateFromPlayer(bool snapWeight)
+    {
+        buffActive = subscribedPlayerStats != null && subscribedPlayerStats.IsPerfectDodgeBuffActive;
+        if (snapWeight)
+            currentWeight = buffActive ? 1f : 0f;
+    }
+
+    private void HandlePerfectDodgeBuffStateChanged(bool active)
+    {
+        if (buffActive == active)
+            return;
+
+        buffActive = active;
+        if (active)
+            TriggerActivationBurst();
+    }
+
+    private void TriggerActivationBurst()
+    {
+        burstTimer = Mathf.Max(burstTimer, burstDuration);
+        burstPulseTime = 0f;
+        if (activationBurstOverlay != null)
+            activationBurstOverlay.transform.SetAsLastSibling();
+    }
+
+    private void ApplyFlowState(float basePulse, float accentPulse, float burstPulse, float baseUvOffset, float accentUvOffset)
+    {
+        float burstWeight = burstDuration <= 0f ? 0f : Mathf.Clamp01(burstTimer / burstDuration);
+
+        if (baseFlowOverlay != null)
+        {
+            baseFlowOverlay.uvRect = new Rect(0f, -baseUvOffset, 1f, 1.85f);
+            baseFlowOverlay.color = new Color(baseFlowColor.r, baseFlowColor.g, baseFlowColor.b, baseFlowAlpha * currentWeight * basePulse);
+        }
+
+        if (accentFlowOverlay != null)
+        {
+            accentFlowOverlay.uvRect = new Rect(0f, -accentUvOffset, 1f, 2.05f);
+            accentFlowOverlay.color = new Color(accentFlowColor.r, accentFlowColor.g, accentFlowColor.b, accentFlowAlpha * currentWeight * accentPulse);
+        }
+
+        if (activationBurstOverlay != null)
+        {
+            activationBurstOverlay.uvRect = new Rect(0f, -(baseUvOffset * 1.45f), 1f, 1.55f);
+            activationBurstOverlay.color = new Color(burstColor.r, burstColor.g, burstColor.b, burstAlpha * burstWeight * burstPulse);
+        }
+    }
+
+    private Texture2D CreateBaseFlowTexture()
+    {
+        if (baseFlowTexture != null)
+            return baseFlowTexture;
+
+        baseFlowTexture = CreateFlowTexture(256, 512, 8f, 17f, 0.36f, 0.65f, 0.48f);
+        return baseFlowTexture;
+    }
+
+    private Texture2D CreateAccentFlowTexture()
+    {
+        if (accentFlowTexture != null)
+            return accentFlowTexture;
+
+        accentFlowTexture = CreateFlowTexture(256, 512, 13f, 31f, 0.48f, 0.95f, 0.72f);
+        return accentFlowTexture;
+    }
+
+    private Texture2D CreateBurstTexture()
+    {
+        if (burstTexture != null)
+            return burstTexture;
 
         const int width = 256;
-        const int height = 256;
-        streakTexture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+        const int height = 512;
+        burstTexture = new Texture2D(width, height, TextureFormat.RGBA32, false)
         {
             wrapMode = TextureWrapMode.Repeat,
             filterMode = FilterMode.Bilinear
@@ -435,18 +798,92 @@ public class BullfightPerfectDodgeVfx : MonoBehaviour
 
         for (int y = 0; y < height; y++)
         {
-            float verticalPulse = 0.25f + (0.75f * Mathf.Pow(Mathf.Sin((y / (float)height) * Mathf.PI), 2f));
+            float vertical = y / (float)(height - 1);
+            float bottomBias = Mathf.Pow(1f - vertical, 0.32f);
+            float surge = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.02f, 0.72f, vertical));
             for (int x = 0; x < width; x++)
             {
-                float stripeA = Mathf.Abs(Mathf.Sin(((x / (float)width) * Mathf.PI * 12f) + (y * 0.03f)));
-                float stripeB = Mathf.Abs(Mathf.Sin(((x / (float)width) * Mathf.PI * 26f) - (y * 0.05f)));
-                float alpha = Mathf.Clamp01((stripeA * 0.45f) + (stripeB * 0.35f) - 0.35f) * verticalPulse;
-                streakTexture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                float horizontal = x / (float)(width - 1);
+                float beamA = Mathf.Abs(Mathf.Sin((horizontal * Mathf.PI * 9f) + (vertical * 5.2f)));
+                float beamB = Mathf.Abs(Mathf.Sin((horizontal * Mathf.PI * 21f) - (vertical * 9.6f)));
+                float beam = Mathf.Clamp01((beamA * 0.52f) + (beamB * 0.38f) - 0.26f);
+                float alpha = beam * Mathf.Lerp(bottomBias, surge, 0.45f);
+                burstTexture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
             }
         }
 
-        streakTexture.Apply();
-        return streakTexture;
+        burstTexture.Apply();
+        return burstTexture;
+    }
+
+    private static Texture2D CreateFlowTexture(int width, int height, float bandA, float bandB, float threshold, float bottomBiasExponent, float crestWeight)
+    {
+        Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+        {
+            wrapMode = TextureWrapMode.Repeat,
+            filterMode = FilterMode.Bilinear
+        };
+
+        for (int y = 0; y < height; y++)
+        {
+            float vertical = y / (float)(height - 1);
+            float bottomBias = Mathf.Pow(1f - vertical, bottomBiasExponent);
+            float crest = Mathf.SmoothStep(0.08f, 1f, vertical);
+            for (int x = 0; x < width; x++)
+            {
+                float horizontal = x / (float)(width - 1);
+                float stripeA = Mathf.Abs(Mathf.Sin((horizontal * Mathf.PI * bandA) + (vertical * 7.4f)));
+                float stripeB = Mathf.Abs(Mathf.Sin((horizontal * Mathf.PI * bandB) - (vertical * 11.1f)));
+                float stripe = Mathf.Clamp01((stripeA * 0.5f) + (stripeB * 0.36f) - threshold);
+                float alpha = stripe * Mathf.Clamp01((bottomBias * 0.72f) + (crest * crestWeight));
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+
+        texture.Apply();
+        return texture;
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribePlayerEvents();
+        ResetPresentation();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribePlayerEvents();
+        ResetPresentation();
+    }
+
+    private void ResetPresentation()
+    {
+        currentWeight = 0f;
+        burstTimer = 0f;
+        baseScrollOffset = 0f;
+        accentScrollOffset = 0f;
+        basePulseTime = 0f;
+        accentPulseTime = 0f;
+        burstPulseTime = 0f;
+        ApplyFlowState(0f, 0f, 0f, 0f, 0f);
+
+        if (baseFlowRect != null)
+            baseFlowRect.localScale = new Vector3(overscan, overscan, 1f);
+
+        if (accentFlowRect != null)
+            accentFlowRect.localScale = new Vector3(overscan, overscan, 1f);
+
+        if (activationBurstRect != null)
+            activationBurstRect.localScale = new Vector3(burstOverscan, burstOverscan, 1f);
+    }
+
+    private void UnsubscribePlayerEvents()
+    {
+        if (subscribedPlayerStats == null)
+            return;
+
+        subscribedPlayerStats.OnPerfectDodgeBuffStateChanged -= HandlePerfectDodgeBuffStateChanged;
+        subscribedPlayerStats = null;
     }
 
     private static void StretchOverlay(RectTransform rect)
