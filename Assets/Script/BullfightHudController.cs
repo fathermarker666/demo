@@ -3,7 +3,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 [DefaultExecutionOrder(-250)]
-public class BullfightHudController : MonoBehaviour
+public partial class BullfightHudController : MonoBehaviour
 {
     private static Font cachedUiFont;
     [SerializeField] private string hudCanvasName = "HUD_Canvas";
@@ -173,6 +173,7 @@ public class BullfightHudController : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
         Application.targetFrameRate = 60;
         DontDestroyOnLoad(gameObject);
         SceneManager.sceneLoaded += OnSceneLoaded;
@@ -182,6 +183,8 @@ public class BullfightHudController : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (Instance == this)
+            Instance = null;
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
@@ -237,6 +240,7 @@ public class BullfightHudController : MonoBehaviour
         hasCachedBullFillColor = false;
         hasCachedPlayerStaminaFillColor = false;
         legacyUiDisabled = false;
+        ResetArcadeHudRuntime();
         layoutDirty = true;
     }
 
@@ -283,6 +287,7 @@ public class BullfightHudController : MonoBehaviour
         EnsurePhaseDisplayUi();
         EnsurePhaseTwoOverlayUi();
         EnsureTutorialOverlayUi();
+        EnsureArcadeUi();
         DisableLegacyShooterUiOnce();
         layoutDirty = false;
         RefreshHudState();
@@ -316,6 +321,7 @@ public class BullfightHudController : MonoBehaviour
         UpdatePhaseDisplay();
         UpdatePhaseTwoHud();
         UpdateTutorialHud();
+        UpdateArcadeHud();
     }
 
     private static void PlaceSlider(Slider slider, Vector2 offset, Vector2 size)

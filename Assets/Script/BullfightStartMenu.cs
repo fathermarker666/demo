@@ -135,7 +135,7 @@ public class BullfightStartMenu : MonoBehaviour
         }
 
         gameFlow.SetMainMenuGameplayLocked(false);
-        gameFlow.StartPhaseOneDirect();
+        gameFlow.StartPhaseOneDirect(true);
     }
 
     public void BeginTutorial()

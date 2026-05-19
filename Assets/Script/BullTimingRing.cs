@@ -60,6 +60,7 @@ public class BullTimingRing : MonoBehaviour
     public float DefaultGoodProgress => goodProgress;
     public float DefaultPerfectProgress => perfectProgress;
     public float LegacyChargeRevealDistance => Mathf.Max(goodDistanceMax, goodDistanceMin, perfectDistanceMax, perfectDistanceMin);
+    public Vector2 FeedbackAnchoredPosition => feedbackRect != null ? feedbackRect.anchoredPosition : feedbackScreenOffset;
 
     private void Awake()
     {

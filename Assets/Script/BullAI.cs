@@ -1,9 +1,18 @@
 ﻿using System;
 using UnityEngine;
 
+public sealed class BullChargeTimingResolution
+{
+    public string Result = string.Empty;
+    public bool PlayerDashedDuringCharge;
+    public bool PlayerTookDamage;
+    public bool WasTutorialTimingCharge;
+}
+
 public class BullAI : MonoBehaviour
 {
     public event Action<float> OnBanderillasHit;
+    public event Action<BullChargeTimingResolution> OnChargeTimingResolved;
 
     private const float ChargePreImpactHoldBuffer = 0.1f;
     private const float MissCommitDistance = 0.9f;
@@ -43,7 +52,9 @@ public class BullAI : MonoBehaviour
     private int perfectReactionPhase;
     private bool timingActive, canDamagePlayerThisCharge, pendingCircleReset, hasRoamTarget, hasQueuedMovePosition, hasQueuedMoveRotation, autoAttackPending, autoAttackCommitted, isPlayerInsideChargeLane, dashedThisCharge, impactCirclesAfterCharge, chargeHasEligibleTarget, chargeQteResolved, chargeResultAllowsDamage, externalChargeTimingControl, phaseTwoChargeMotionActive, chargeMissPlayerLockActive;
     private bool tutorialControlActive, tutorialChargeDamageEnabled, tutorialChargeSequenceActive, tutorialChargeSequenceComplete, tutorialChargeHitPlayer, tutorialChargeUsesTiming;
+    private bool pendingChargeTimingResolutionActive, pendingChargeTimingPlayerDashed, pendingChargeTimingWasTutorialTiming;
     private string tutorialChargeResult = string.Empty;
+    private string pendingChargeTimingResult = string.Empty;
     private Animator animator; private BullAIAnimationView animationView; private BullAIChargeTelegraphView chargeTelegraphView; private Vector3 chargeStartPosition, chargeDirection = Vector3.forward, roamCenter, roamTarget, circlingCenter, queuedMovePosition; private Quaternion queuedMoveRotation;
     private Rigidbody bullRigidbody; private Collider bullCollider, playerCollider; private BullChargeHitbox chargeHitbox;
     private readonly Collider[] chargeLaneOverlapResults = new Collider[8];
@@ -355,6 +366,7 @@ public class BullAI : MonoBehaviour
             if (TryResolveTerminalChargeDamage())
                 return;
 
+            CompletePendingChargeTimingResolution(false);
             EnterFatigue(true);
         }
     }
@@ -590,6 +602,11 @@ public class BullAI : MonoBehaviour
         if (tutorialControlActive && tutorialChargeSequenceActive)
             tutorialChargeResult = result;
 
+        string resolvedResult = result;
+        bool dashedDuringCharge = dashedThisCharge;
+        bool wasTutorialTimingCharge = tutorialControlActive && tutorialChargeSequenceActive && tutorialChargeUsesTiming;
+        bool emitResolutionImmediately = false;
+
         switch (result)
         {
             case "Perfect!":
@@ -598,6 +615,8 @@ public class BullAI : MonoBehaviour
                 {
                     if (tutorialControlActive && tutorialChargeSequenceActive)
                         tutorialChargeResult = "Miss";
+                    resolvedResult = "Miss";
+                    QueuePendingChargeTimingResolution(resolvedResult, dashedDuringCharge, wasTutorialTimingCharge);
                     BeginChargeMissCommit();
                     break;
                 }
@@ -609,17 +628,65 @@ public class BullAI : MonoBehaviour
                 playerStats.GrantInvulnerability(successfulDodgeInvulnerability);
                 if (result == "Perfect!")
                     playerStats.RewardPerfectDodge();
-                if (result == "Perfect!" && gameFlow != null && gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseOne)
+                if (result == "Perfect!" &&
+                    ((gameFlow != null && gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseOne) ||
+                     wasTutorialTimingCharge))
                     EnterPerfectReaction();
                 else
                     EnterFatigue(false);
+                emitResolutionImmediately = true;
                 break;
             case "Miss":
                 if (tutorialControlActive && tutorialChargeSequenceActive)
                     tutorialChargeResult = "Miss";
+                resolvedResult = "Miss";
+                QueuePendingChargeTimingResolution(resolvedResult, dashedDuringCharge, wasTutorialTimingCharge);
                 BeginChargeMissCommit();
                 break;
         }
+
+        if (emitResolutionImmediately)
+            EmitChargeTimingResolution(resolvedResult, dashedDuringCharge, false, wasTutorialTimingCharge);
+    }
+
+    private void QueuePendingChargeTimingResolution(string result, bool dashedDuringCharge, bool wasTutorialTimingCharge)
+    {
+        pendingChargeTimingResolutionActive = true;
+        pendingChargeTimingResult = result ?? string.Empty;
+        pendingChargeTimingPlayerDashed = dashedDuringCharge;
+        pendingChargeTimingWasTutorialTiming = wasTutorialTimingCharge;
+    }
+
+    private void CompletePendingChargeTimingResolution(bool playerTookDamage)
+    {
+        if (!pendingChargeTimingResolutionActive)
+            return;
+
+        EmitChargeTimingResolution(
+            pendingChargeTimingResult,
+            pendingChargeTimingPlayerDashed,
+            playerTookDamage,
+            pendingChargeTimingWasTutorialTiming);
+        ClearPendingChargeTimingResolution();
+    }
+
+    private void ClearPendingChargeTimingResolution()
+    {
+        pendingChargeTimingResolutionActive = false;
+        pendingChargeTimingPlayerDashed = false;
+        pendingChargeTimingWasTutorialTiming = false;
+        pendingChargeTimingResult = string.Empty;
+    }
+
+    private void EmitChargeTimingResolution(string result, bool dashedDuringCharge, bool playerTookDamage, bool wasTutorialTimingCharge)
+    {
+        OnChargeTimingResolved?.Invoke(new BullChargeTimingResolution
+        {
+            Result = result ?? string.Empty,
+            PlayerDashedDuringCharge = dashedDuringCharge,
+            PlayerTookDamage = playerTookDamage,
+            WasTutorialTimingCharge = wasTutorialTimingCharge
+        });
     }
 
     private void HandlePlayerAttack(float distance)
@@ -679,6 +746,7 @@ public class BullAI : MonoBehaviour
 
     private void EnterFatigue(bool circleAfterCharge)
     {
+        CompletePendingChargeTimingResolution(false);
         CancelAutoAttackAndReschedule();
         currentState = BullState.Fatigued; ResetChargeQteState(); pendingCircleReset = circleAfterCharge; hasRoamTarget = false; stateTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.45f : UnityEngine.Random.Range(fatigueDurationRange.x, fatigueDurationRange.y); attackRecoveryTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.3f : attackRecoveryDuration; HideChargeTelegraph();
         if (timingScript != null) timingScript.HideRingKeepFeedback();
@@ -1043,6 +1111,7 @@ public class BullAI : MonoBehaviour
         tutorialChargeHitPlayer = false;
         tutorialChargeUsesTiming = false;
         tutorialChargeResult = string.Empty;
+        ClearPendingChargeTimingResolution();
 
         if (active)
             EnterTutorialIdle();
@@ -1060,6 +1129,7 @@ public class BullAI : MonoBehaviour
         tutorialChargeHitPlayer = false;
         tutorialChargeUsesTiming = false;
         tutorialChargeResult = string.Empty;
+        ClearPendingChargeTimingResolution();
         ClearAutoAttackState();
         ResetChargeQteState();
         HideChargeTelegraph();
@@ -1079,6 +1149,7 @@ public class BullAI : MonoBehaviour
         tutorialChargeSequenceComplete = false;
         tutorialChargeHitPlayer = false;
         tutorialChargeResult = string.Empty;
+        ClearPendingChargeTimingResolution();
         pendingCircleReset = false;
         hasRoamTarget = false;
         ClearAutoAttackState();
@@ -1217,6 +1288,7 @@ public class BullAI : MonoBehaviour
         tutorialChargeHitPlayer = false;
         tutorialChargeUsesTiming = false;
         tutorialChargeResult = string.Empty;
+        ClearPendingChargeTimingResolution();
         if (timingScript != null) timingScript.HideImmediate();
         QueueMovePosition(ClampWithinArena(GetCurrentBullPosition(), arenaBoundaryPadding));
         SnapToGround(true);
@@ -1225,7 +1297,7 @@ public class BullAI : MonoBehaviour
 
     private void EnterDeathState()
     {
-        currentState = BullState.Dead; ResetChargeQteState(); pendingCircleReset = false; hasRoamTarget = false; stateTimer = 0f; attackRecoveryTimer = 999f; phaseTwoChargeMotionActive = false; ClearAutoAttackState(); HideChargeTelegraph();
+        currentState = BullState.Dead; ResetChargeQteState(); pendingCircleReset = false; hasRoamTarget = false; stateTimer = 0f; attackRecoveryTimer = 999f; phaseTwoChargeMotionActive = false; ClearAutoAttackState(); HideChargeTelegraph(); ClearPendingChargeTimingResolution();
         if (timingScript != null) timingScript.HideImmediate();
         if (bullRigidbody != null) bullRigidbody.velocity = Vector3.zero;
     }
@@ -1308,6 +1380,8 @@ public class BullAI : MonoBehaviour
         canDamagePlayerThisCharge = false;
         if (TryGetPlayerCollider(out Collider activePlayerCollider))
             StopBullShortOfPlayer(activePlayerCollider, chargeImpactStopBuffer);
+
+        CompletePendingChargeTimingResolution(true);
 
         if (tutorialControlActive && tutorialChargeSequenceActive)
         {

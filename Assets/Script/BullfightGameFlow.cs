@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 using UnityEngine.Rendering;
 
-public class BullfightGameFlow : MonoBehaviour
+public partial class BullfightGameFlow : MonoBehaviour
 {
     private bool phaseTwoResolveUseOrbit;
     private float phaseTwoResolveOrbitAngle;
@@ -114,10 +114,11 @@ public class BullfightGameFlow : MonoBehaviour
         bullAI.SetPhaseTwoPose(pos, rot);
         bullAI.PlayPhaseTwoWalkLoop();
     }
-    public void StartPhaseOneDirect()
+    public void StartPhaseOneDirect(bool arcadeMode = true)
     {
         ResolveReferencesIfNeeded();
         ResetState();
+        ConfigureArcadeRun(arcadeMode);
         bullBleedVfx?.ClearBleeds();
         phaseTwoPresentation?.ExitPhaseTwo();
         RestoreDefaultLighting();
@@ -493,6 +494,8 @@ public class BullfightGameFlow : MonoBehaviour
         }
 
         HandleDebugShortcuts();
+        if (UpdateArcadeSequences())
+            return;
 
         if (currentPhase == GamePhase.PhaseZeroTutorial)
         {
@@ -518,7 +521,8 @@ public class BullfightGameFlow : MonoBehaviour
         {
             if (currentPhase == GamePhase.PhaseOne)
             {
-                isEnteringPhaseTwo = true;
+                if (!TryBeginArcadePhaseOneClearSequence())
+                    isEnteringPhaseTwo = true;
             }
             else if (!isEnteringPhaseTwo)
             {
@@ -530,6 +534,19 @@ public class BullfightGameFlow : MonoBehaviour
 
                 return;
             }
+        }
+
+        if (currentPhase == GamePhase.PhaseOne &&
+            !isEnteringPhaseTwo &&
+            bullStats != null &&
+            bullStats.currentHealth > 0f &&
+            arcadeScoring != null &&
+            arcadeScoring.IsPhaseOneTimeExpired)
+        {
+            if (!TryBeginArcadePhaseOneTimeUpSequence())
+                isEnteringPhaseTwo = true;
+
+            return;
         }
 
         if (isEnteringPhaseTwo)
@@ -563,6 +580,7 @@ public class BullfightGameFlow : MonoBehaviour
     {
         ResolveReferencesIfNeeded();
         ResetState();
+        ConfigureArcadeRun(true);
         bullBleedVfx?.ClearBleeds();
 
         if (playerController != null)
@@ -923,6 +941,7 @@ public class BullfightGameFlow : MonoBehaviour
     private void StartPhaseOneFromTutorial()
     {
         ResolveReferencesIfNeeded();
+        ConfigureArcadeRun(true);
         tutorialFeedbackText = string.Empty;
         currentEnding = EndingType.None;
         tutorialState = TutorialState.None;
@@ -1549,6 +1568,7 @@ public class BullfightGameFlow : MonoBehaviour
         phaseTwoResolveCompleted = false;
         phaseTwoResolveShuttleSegment = 0;
         phaseTwoResolveNarrationLine = string.Empty;
+        arcadeScoring?.RegisterPhaseTwoStabResult(result);
         if (isSuccess)
         {
             bullHitCount++;
@@ -1683,6 +1703,7 @@ public class BullfightGameFlow : MonoBehaviour
 
     private void EnterPhaseTwo()
     {
+        SetArcadeOverlayGameplayFrozen(false);
         isEnteringPhaseTwo = false;
         bullDeathTimer = 0f;
         ApplyPhaseTwoLighting();
@@ -1693,6 +1714,7 @@ public class BullfightGameFlow : MonoBehaviour
         if (audioController != null) audioController.PlayPhaseBGM(2);
         currentEnding = EndingType.None;
         phaseTwoState = PhaseTwoState.Intro;
+        NotifyArcadePhaseTwoEntered();
         phaseTwoStateElapsed = 0f;
         calibrationHoldTimer = 0f;
         phaseTwoCalibrated = false;
@@ -1817,21 +1839,29 @@ public class BullfightGameFlow : MonoBehaviour
 
         if (Input.GetKeyDown(debugPhaseTwoKey) && bullStats != null)
         {
+            MarkArcadeRunDebugModified();
             bullStats.ApplyDebugDamage(debugPhaseTwoDamage);
             Debug.Log($"Debug shortcut: bull damaged for {debugPhaseTwoDamage}. Current health: {bullStats.currentHealth}");
         }
 
         if (Input.GetKeyDown(debugRefillStaminaKey) && playerStats != null)
+        {
+            MarkArcadeRunDebugModified();
             playerStats.RefillStaminaForDebug();
+        }
 
         if (Input.GetKeyDown(debugKillBullKey) && bullStats != null)
         {
+            MarkArcadeRunDebugModified();
             bullStats.SetHealth(0f);
             Debug.Log("Debug shortcut: bull health forced to 0.");
         }
 
         if (Input.GetKeyDown(debugKillPlayerKey) && playerStats != null)
+        {
+            MarkArcadeRunDebugModified();
             playerStats.ForceDeathForDebug();
+        }
     }
 
     private static bool IsDevelopmentDebugEnvironment()
@@ -1850,6 +1880,9 @@ public class BullfightGameFlow : MonoBehaviour
         audioController?.StopAllAudio();
         if (currentPhase == GamePhase.Ending)
             return;
+
+        if (ending == EndingType.Mercy)
+            arcadeScoring?.MarkRunUnranked("Mercy");
 
         if (ending == EndingType.Tragedy && playerStats != null)
             playerStats.ForceEndingDeathPresentation();
@@ -1881,6 +1914,7 @@ public class BullfightGameFlow : MonoBehaviour
     private void ResetState()
     {
         StopEndingVideoPlayback();
+        ResetArcadeRuntimeState();
         currentPhase = GamePhase.PhaseOne;
         currentEnding = EndingType.None;
         endingVideoStartDelayRemaining = -1f;
@@ -2068,7 +2102,7 @@ public class BullfightGameFlow : MonoBehaviour
         if (endingVideoPlayer == null || endingClip == null)
         {
             RestoreSceneAfterEndingPlayback();
-            ReturnToStartMenuAfterEnding();
+            ShowArcadeResultsOrReturnToMenu();
             return;
         }
 
@@ -2126,7 +2160,7 @@ public class BullfightGameFlow : MonoBehaviour
             return;
 
         StopEndingVideoPlayback();
-        ReturnToStartMenuAfterEnding();
+        ShowArcadeResultsOrReturnToMenu();
     }
 
     private void StopEndingVideoPlayback()
@@ -2178,7 +2212,7 @@ public class BullfightGameFlow : MonoBehaviour
             source.loopPointReached -= HandleEndingVideoCompleted;
 
         StopEndingVideoPlayback();
-        ReturnToStartMenuAfterEnding();
+        ShowArcadeResultsOrReturnToMenu();
     }
 
     private VideoClip GetEndingVideoClip(EndingType ending)
