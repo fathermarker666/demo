@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -15,6 +16,7 @@ public class BullBleedVfx : MonoBehaviour
     [SerializeField, Range(0f, 0.5f)] private float verticalOffset = 0.03f;
     [SerializeField, Range(0f, 45f)] private float randomYawJitter = 16f;
     [SerializeField] private Vector2 randomScaleRange = new Vector2(0.92f, 1.08f);
+    [SerializeField, Range(0f, 10f)] private float bleedSprayDuration = 3.5f;
 
     [Header("Preferred Anchors")]
     [SerializeField] private string[] preferredAnchorNames = new[]    {
@@ -101,6 +103,7 @@ public class BullBleedVfx : MonoBehaviour
         float scaleMultiplier = Random.Range(randomScaleRange.x, randomScaleRange.y);
         bleedInstance.transform.localScale *= scaleMultiplier;
         activeBleeds.Add(bleedInstance);
+        StartCoroutine(StopBleedSprayAfterDuration(bleedInstance, bleedSprayDuration));
     }
 
     private void HandleDefeated()
@@ -184,6 +187,25 @@ public class BullBleedVfx : MonoBehaviour
         {
             if (activeBleeds[i] == null)
                 activeBleeds.RemoveAt(i);
+        }
+    }
+
+    private IEnumerator StopBleedSprayAfterDuration(GameObject bleedInstance, float duration)
+    {
+        if (bleedInstance == null || duration <= 0f)
+            yield break;
+
+        yield return new WaitForSeconds(duration);
+
+        if (bleedInstance == null)
+            yield break;
+
+        ParticleSystem[] particleSystems = bleedInstance.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem particleSystem = particleSystems[i];
+            if (particleSystem != null)
+                particleSystem.Stop(true, ParticleSystemStopBehavior.StopEmitting);
         }
     }
 

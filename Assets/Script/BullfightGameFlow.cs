@@ -2106,6 +2106,12 @@ public class BullfightGameFlow : MonoBehaviour
         if (!endingVideoPlaybackActive)
             return;
 
+        if (IsEndingSkipKeyboardPressedThisFrame())
+        {
+            SkipEndingVideo();
+            return;
+        }
+
         if (playerController == null || !playerController.HasRecentPhaseTwoSensorReading())
             return;
 
@@ -2240,7 +2246,7 @@ public class BullfightGameFlow : MonoBehaviour
         endingSkipLabel.fontStyle = FontStyle.Bold;
         endingSkipLabel.color = new Color(1f, 0.92f, 0.32f, 1f);
         endingSkipLabel.raycastTarget = false;
-        endingSkipLabel.text = "\u8df3\u904e\u5f71\u7247\n\u529b\u9053 > 35";
+        endingSkipLabel.text = GetEndingSkipInstructionText(35f, false);
 
         Outline labelOutline = labelObject.AddComponent<Outline>();
         labelOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
@@ -2322,9 +2328,7 @@ public class BullfightGameFlow : MonoBehaviour
         if (endingSkipLabel != null)
         {
             bool canSkip = forcePercent >= thresholdPercent;
-            endingSkipLabel.text = canSkip
-                ? "\u53ef\u4ee5\u8df3\u904e\u5f71\u7247"
-                : $"\u9084\u9700\u66f4\u591a\u529b\u9053\n\u529b\u9053 > {threshold:0}";
+            endingSkipLabel.text = GetEndingSkipInstructionText(threshold, canSkip);
             endingSkipLabel.color = canSkip
                 ? new Color(1f, 0.98f, 0.45f, 1f)
                 : new Color(0.98f, 0.88f, 0.42f, 1f);
@@ -2341,6 +2345,37 @@ public class BullfightGameFlow : MonoBehaviour
 
         if (endingSkipForceBarFillRect != null)
             endingSkipForceBarFillRect.anchorMax = new Vector2(normalizedForce, 1f);
+    }
+
+    private bool IsEndingSkipKeyboardPressedThisFrame()
+    {
+        return endingSkipKey != KeyCode.None && Input.GetKeyDown(endingSkipKey);
+    }
+
+    private string GetEndingSkipInstructionText(float threshold, bool canSkip)
+    {
+        string statusText = canSkip ? "\u53ef\u4ee5\u8df3\u904e\u5f71\u7247" : "\u8df3\u904e\u5f71\u7247";
+        if (endingSkipKey == KeyCode.None)
+            return $"{statusText}\n\u529b\u9053 > {threshold:0}";
+
+        string keyLabel = GetReadableKeyCodeLabel(endingSkipKey);
+        return $"{statusText}\n\u6309 {keyLabel} \u6216\u529b\u9053 > {threshold:0}";
+    }
+
+    private static string GetReadableKeyCodeLabel(KeyCode keyCode)
+    {
+        return keyCode switch
+        {
+            KeyCode.Space => "Space",
+            KeyCode.LeftControl => "LeftCtrl",
+            KeyCode.RightControl => "RightCtrl",
+            KeyCode.LeftShift => "LeftShift",
+            KeyCode.RightShift => "RightShift",
+            KeyCode.Return => "Enter",
+            KeyCode.KeypadEnter => "NumpadEnter",
+            KeyCode.Escape => "Esc",
+            _ => keyCode.ToString()
+        };
     }
 
     private static Font GetRuntimeUiFont()

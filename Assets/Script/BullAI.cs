@@ -1329,17 +1329,29 @@ public class BullAI : MonoBehaviour
         Vector3 stopDirection = chargeDirection;
         stopDirection.y = 0f;
         if (stopDirection.sqrMagnitude <= 0.0001f)
-            stopDirection = GetCurrentBullRotation() * Vector3.forward;
+            stopDirection = GetImmediateBullRotation() * Vector3.forward;
         stopDirection.y = 0f;
         if (stopDirection.sqrMagnitude <= 0.0001f) return;
         stopDirection.Normalize();
 
-        Vector3 bullPosition = GetCurrentBullPosition();
+        Vector3 bullPosition = GetImmediateBullPosition();
         Vector3 playerSurfacePoint = activePlayerCollider.ClosestPoint(bullPosition);
         Vector3 targetBullPosition = playerSurfacePoint - (stopDirection * (GetBullBodyFrontFaceDistance() + extraBuffer));
         targetBullPosition.y = bullPosition.y;
-        QueueMovePosition(targetBullPosition);
-        CommitQueuedPoseImmediate();
+
+        float forwardAdjustment = Vector3.Dot(targetBullPosition - bullPosition, stopDirection);
+        if (forwardAdjustment <= 0f)
+        {
+            hasQueuedMovePosition = false;
+            queuedMovePosition = bullPosition;
+            StopBullMotionImmediate();
+        }
+        else
+        {
+            QueueMovePosition(targetBullPosition);
+            CommitQueuedPoseImmediate();
+        }
+
         ResolvePlayerOverlapFromBull(activePlayerCollider, 0.02f, false);
     }
 
