@@ -13,6 +13,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private const float StickDeadzone = 0.2f;
     private const float VolumeAdjustSpeed = 0.65f;
     private const int CanvasSortingOrder = 6000;
+    private const float ResetConfirmationDuration = 4f;
 
     [Header("Overlay")]
     [SerializeField] private Sprite controlsOverlaySprite;
@@ -37,10 +38,12 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private Text bgmValueLabel;
     private Text sfxValueLabel;
     private Text helpLabel;
+    private Text resetActionLabel;
     private Text toggleHintLabel;
 
     private BullfightAudioController audioController;
     private BullfightPlayerController playerController;
+    private BullfightGameFlow gameFlow;
     private BullfightStartMenu startMenu;
     private ManualStartMenuController manualStartMenu;
     private float previousTimeScale = 1f;
@@ -51,6 +54,9 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private bool previousCursorVisible;
     private bool playerControllerWasEnabled;
     private bool frontendBlocked;
+    private bool resetConfirmationArmed;
+    private bool resetInProgress;
+    private float resetConfirmationExpireAt = -1f;
     private Coroutine actionRumbleRoutine;
 
     public static BullfightPauseSettingsUI Instance { get; private set; }
@@ -83,6 +89,9 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (frontendBlocked)
             return;
 
+        if (resetConfirmationArmed && Time.unscaledTime >= resetConfirmationExpireAt)
+            CancelResetConfirmation();
+
         UpdateClosedHintVisibility();
 
         if (IsAnyFrontendVisible())
@@ -92,6 +101,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         {
             if (controlsOverlayOpen)
             {
+                CancelResetConfirmation();
                 TriggerActionRumble();
                 ToggleControlsOverlay(false);
                 return;
@@ -99,6 +109,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
             if (menuOpen)
             {
+                CancelResetConfirmation();
                 TriggerActionRumble();
                 CloseMenu();
             }
@@ -118,6 +129,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         {
             if (WasControlsPressedThisFrame())
             {
+                CancelResetConfirmation();
                 TriggerActionRumble();
                 ToggleControlsOverlay(false);
             }
@@ -125,8 +137,16 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             return;
         }
 
+        if (WasResetPressedThisFrame())
+        {
+            TriggerActionRumble();
+            HandleResetPressed();
+            return;
+        }
+
         if (WasRestartPressedThisFrame())
         {
+            CancelResetConfirmation();
             TriggerActionRumble();
             ReturnToStartSelectionMenu();
             return;
@@ -134,6 +154,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         if (WasControlsPressedThisFrame())
         {
+            CancelResetConfirmation();
             TriggerActionRumble();
             ToggleControlsOverlay(true);
             return;
@@ -141,6 +162,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         if (WasHomePressedThisFrame())
         {
+            CancelResetConfirmation();
             TriggerActionRumble();
             EnterHomeMenu();
             return;
@@ -148,6 +170,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         if (WasResumePressedThisFrame())
         {
+            CancelResetConfirmation();
             TriggerActionRumble();
             CloseMenu();
             return;
@@ -179,6 +202,8 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        resetInProgress = false;
+        CancelResetConfirmation();
         ResolveReferencesIfNeeded();
         RefreshLabels();
     }
@@ -279,21 +304,22 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void CreateActionColumn(Transform parent, Vector2 anchoredPosition)
     {
-        GameObject column = CreatePanel(parent, "ActionColumn", new Color(0.16f, 0.05f, 0.05f, 0.95f), new Vector2(420f, 500f));
+        GameObject column = CreatePanel(parent, "ActionColumn", new Color(0.16f, 0.05f, 0.05f, 0.95f), new Vector2(420f, 540f));
         RectTransform columnRect = column.GetComponent<RectTransform>();
         columnRect.anchorMin = new Vector2(0.5f, 0.5f);
         columnRect.anchorMax = new Vector2(0.5f, 0.5f);
         columnRect.pivot = new Vector2(0.5f, 0.5f);
         columnRect.anchoredPosition = anchoredPosition;
 
-        CreateText(column.transform, "ActionTitle", "MENU", 32, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0f, 188f), new Vector2(280f, 44f));
-        CreateActionButtonVisual(column.transform, "RestartAction", "開始選單 (Y)", new Vector2(0f, 94f));
-        CreateActionButtonVisual(column.transform, "ControlsAction", "操作說明 (B)", new Vector2(0f, 18f));
-        CreateActionButtonVisual(column.transform, "HomeAction", "回首頁 (X)", new Vector2(0f, -58f));
-        CreateActionButtonVisual(column.transform, "ResumeAction", "返回遊戲 (A)", new Vector2(0f, -134f));
+        CreateText(column.transform, "ActionTitle", "MENU", 32, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0f, 210f), new Vector2(280f, 44f));
+        resetActionLabel = CreateActionButtonVisual(column.transform, "ResetAction", "重置遊戲 (R / RB)", new Vector2(0f, 134f));
+        CreateActionButtonVisual(column.transform, "RestartAction", "開始選單 (Y)", new Vector2(0f, 62f));
+        CreateActionButtonVisual(column.transform, "ControlsAction", "操作說明 (B)", new Vector2(0f, -10f));
+        CreateActionButtonVisual(column.transform, "HomeAction", "回首頁 (X)", new Vector2(0f, -82f));
+        CreateActionButtonVisual(column.transform, "ResumeAction", "返回遊戲 (A)", new Vector2(0f, -154f));
     }
 
-    private void CreateActionButtonVisual(Transform parent, string name, string label, Vector2 anchoredPosition)
+    private Text CreateActionButtonVisual(Transform parent, string name, string label, Vector2 anchoredPosition)
     {
         GameObject buttonVisual = CreatePanel(parent, name, new Color(0.56f, 0.09f, 0.09f, 1f), new Vector2(340f, 66f));
         RectTransform rect = buttonVisual.GetComponent<RectTransform>();
@@ -302,7 +328,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = anchoredPosition;
 
-        CreateText(buttonVisual.transform, name + "Label", label, 28, FontStyle.Bold, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(300f, 48f));
+        return CreateText(buttonVisual.transform, name + "Label", label, 28, FontStyle.Bold, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(300f, 48f));
     }
 
     private void CreateVolumeColumn(Transform parent, string prefix, string title, string stickLabelText, Vector2 anchoredPosition, out RectTransform fillRect, out Text valueLabel)
@@ -403,6 +429,9 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (playerController == null)
             playerController = BullfightSceneCache.FindObject<BullfightPlayerController>();
 
+        if (gameFlow == null)
+            gameFlow = BullfightSceneCache.FindObject<BullfightGameFlow>();
+
         if (startMenu == null)
             startMenu = FindObjectOfType<BullfightStartMenu>(true);
 
@@ -430,6 +459,12 @@ public class BullfightPauseSettingsUI : MonoBehaviour
                (Gamepad.current != null && Gamepad.current.buttonNorth.wasPressedThisFrame);
     }
 
+    private static bool WasResetPressedThisFrame()
+    {
+        return (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame) ||
+               (Gamepad.current != null && Gamepad.current.rightShoulder.wasPressedThisFrame);
+    }
+
     private static bool WasControlsPressedThisFrame()
     {
         return (Keyboard.current != null && Keyboard.current.bKey.wasPressedThisFrame) ||
@@ -453,6 +488,8 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (frontendBlocked)
             return;
 
+        resetInProgress = false;
+        CancelResetConfirmation();
         ResolveReferencesIfNeeded();
         previousTimeScale = Time.timeScale;
         previousFixedDeltaTime = Time.fixedDeltaTime;
@@ -483,6 +520,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void CloseMenu()
     {
+        CancelResetConfirmation();
         ResumeGameplay();
         menuOpen = false;
         SetMenuVisible(false);
@@ -491,6 +529,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void ReturnToStartSelectionMenu()
     {
+        CancelResetConfirmation();
         ResolveReferencesIfNeeded();
         if (startMenu == null)
         {
@@ -506,6 +545,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void EnterHomeMenu()
     {
+        CancelResetConfirmation();
         ResolveReferencesIfNeeded();
         if (manualStartMenu != null)
         {
@@ -520,6 +560,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void CloseMenuForFrontendTransition()
     {
+        CancelResetConfirmation();
         playerController?.ClearInputBuffers();
         controlsOverlayOpen = false;
         menuOpen = false;
@@ -529,8 +570,77 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private void ToggleControlsOverlay(bool visible)
     {
+        if (visible)
+            CancelResetConfirmation();
+
         controlsOverlayOpen = visible;
         SetControlsOverlayVisible(visible);
+        RefreshLabels();
+    }
+
+    private void HandleResetPressed()
+    {
+        if (resetInProgress)
+            return;
+
+        if (!resetConfirmationArmed)
+        {
+            resetConfirmationArmed = true;
+            resetConfirmationExpireAt = Time.unscaledTime + ResetConfirmationDuration;
+            RefreshLabels();
+            return;
+        }
+
+        ExecuteResetToHomeMenu();
+    }
+
+    private void ExecuteResetToHomeMenu()
+    {
+        resetInProgress = true;
+        CancelResetConfirmation();
+        frontendBlocked = true;
+        controlsOverlayOpen = false;
+        menuOpen = false;
+        SetControlsOverlayVisible(false);
+        SetMenuVisible(false);
+
+        if (canvas != null)
+            canvas.gameObject.SetActive(false);
+
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = previousFixedDeltaTime > 0f ? previousFixedDeltaTime : 0.02f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (playerController != null)
+        {
+            playerController.ClearInputBuffers();
+            playerController.ForceStopMovement();
+        }
+
+        if (gameFlow != null)
+        {
+            gameFlow.ReloadCurrentSceneToHomeMenu();
+            return;
+        }
+
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (!activeScene.IsValid())
+            return;
+
+        if (activeScene.buildIndex >= 0)
+            SceneManager.LoadScene(activeScene.buildIndex);
+        else
+            SceneManager.LoadScene(activeScene.name);
+    }
+
+    private void CancelResetConfirmation()
+    {
+        if (!resetConfirmationArmed)
+            return;
+
+        resetConfirmationArmed = false;
+        resetConfirmationExpireAt = -1f;
         RefreshLabels();
     }
 
@@ -627,8 +737,13 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         {
             helpLabel.text = controlsOverlayOpen
                 ? "B / ESC / LB 關閉操作說明"
-                : "Y：開始選單   B：操作說明   X：回首頁   A：返回遊戲\nLeft Stick / W,S：BGM   Right Stick / Up,Down：SFX";
+                : resetConfirmationArmed
+                    ? "再按一次 R / RB 會完整重載並回到首頁，其他操作會取消重置確認。\nLeft Stick / W,S：BGM   Right Stick / Up,Down：SFX"
+                    : "R / RB：重置遊戲   Y：開始選單   B：操作說明   X：回首頁   A：返回遊戲\nLeft Stick / W,S：BGM   Right Stick / Up,Down：SFX";
         }
+
+        if (resetActionLabel != null)
+            resetActionLabel.text = resetConfirmationArmed ? "確認重置 (R / RB)" : "重置遊戲 (R / RB)";
 
         if (controlsOverlayImage != null)
         {
@@ -658,6 +773,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         if (blocked)
         {
+            CancelResetConfirmation();
             controlsOverlayOpen = false;
             menuOpen = false;
             SetControlsOverlayVisible(false);

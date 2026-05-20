@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
 
 public partial class BullfightGameFlow : MonoBehaviour
 {
@@ -2956,6 +2957,32 @@ public partial class BullfightGameFlow : MonoBehaviour
             timingRing.HideImmediate();
             timingRing.ResetTimingWindow();
         }
+    }
+
+    public void ReloadCurrentSceneToHomeMenu()
+    {
+        ResolveReferencesIfNeeded();
+        StopTutorialCompletionVideoPlayback();
+        StopEndingVideoPlayback();
+        phaseTwoPresentation?.ExitPhaseTwo();
+        bullAI?.SetTutorialControl(false);
+        ResetArcadeRuntimeState();
+
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = 0.02f;
+        ApplySkyboxForPhase(GamePhase.PhaseOne);
+
+        playerController?.ClearInputBuffers();
+        playerController?.ForceStopMovement();
+
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (!activeScene.IsValid())
+            return;
+
+        if (activeScene.buildIndex >= 0)
+            SceneManager.LoadScene(activeScene.buildIndex);
+        else
+            SceneManager.LoadScene(activeScene.name);
     }
 
     private void ResolveReferencesIfNeeded()

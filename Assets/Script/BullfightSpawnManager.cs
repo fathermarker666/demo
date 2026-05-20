@@ -32,12 +32,13 @@ public class BullfightSpawnManager : MonoBehaviour
     private Rigidbody bullRigidbody;
     private Transform playerSpawnPoint;
     private Transform bullSpawnPoint;
-    private BoxCollider arenaFloorCollider;
+    private Collider arenaFloorCollider;
+    private Collider arenaBoundaryCollider;
     private Vector3 arenaWorldCenter;
     private bool arenaAdjusted;
     private bool initialSpawnApplied;
 
-    public Vector3 ArenaCenter => arenaFloorCollider != null ? arenaWorldCenter : (playerSpawnPoint != null ? playerSpawnPoint.position : transform.position);
+    public Vector3 ArenaCenter => (arenaFloorCollider != null || arenaBoundaryCollider != null) ? arenaWorldCenter : (playerSpawnPoint != null ? playerSpawnPoint.position : transform.position);
     public float ArenaRadius => bullArenaRadius;
     public Transform BullSpawnPoint => bullSpawnPoint;
 
@@ -94,6 +95,41 @@ public class BullfightSpawnManager : MonoBehaviour
         }
 
         transform.SetPositionAndRotation(targetPosition, targetRotation);
+    }
+
+    public bool KeepPlayerInsideArena(float overflowTolerance = 0.35f, float snapPadding = 0.1f)
+    {
+        Vector3 center = ArenaCenter;
+        Vector3 flatOffset = new Vector3(transform.position.x - center.x, 0f, transform.position.z - center.z);
+        float maxAllowedRadius = Mathf.Max(1f, bullArenaRadius + Mathf.Max(0f, overflowTolerance));
+        if (flatOffset.sqrMagnitude <= maxAllowedRadius * maxAllowedRadius)
+            return false;
+
+        if (flatOffset.sqrMagnitude <= 0.0001f)
+            return false;
+
+        BullfightPlayerController controller = playerStats != null ? playerStats.GetComponent<BullfightPlayerController>() : null;
+        controller?.ClearInputBuffers();
+        controller?.ForceStopMovement();
+
+        float targetRadius = Mathf.Max(0.5f, bullArenaRadius - Mathf.Max(0f, snapPadding));
+        Vector3 clampedOffset = flatOffset.normalized * targetRadius;
+        Vector3 correctedPosition = new Vector3(center.x + clampedOffset.x, transform.position.y, center.z + clampedOffset.z);
+
+        if (playerRigidbody == null)
+            playerRigidbody = GetComponent<Rigidbody>();
+
+        if (playerRigidbody != null)
+        {
+            Vector3 velocity = playerRigidbody.velocity;
+            velocity.x = 0f;
+            velocity.z = 0f;
+            playerRigidbody.velocity = velocity;
+            playerRigidbody.position = correctedPosition;
+        }
+
+        transform.position = correctedPosition;
+        return true;
     }
 
     public void ResetBullToSpawn()
@@ -234,17 +270,31 @@ public class BullfightSpawnManager : MonoBehaviour
 
     private void CacheArenaBounds()
     {
-        BoxCollider bestFloor = FindLargestArenaFloorCollider();
-        if (bestFloor == null)
-            return;
+        Vector3 referencePosition = playerSpawnPoint != null ? playerSpawnPoint.position : transform.position;
+        arenaBoundaryCollider = FindArenaBoundaryCollider(referencePosition);
+        arenaFloorCollider = FindLargestArenaFloorCollider(referencePosition);
 
-        arenaFloorCollider = bestFloor;
-        Bounds bounds = bestFloor.bounds;
-        arenaWorldCenter = bounds.center;
-        arenaWorldCenter.y = playerSpawnPoint != null ? playerSpawnPoint.position.y : transform.position.y;
+        arenaWorldCenter = arenaBoundaryCollider != null
+            ? arenaBoundaryCollider.bounds.center
+            : arenaFloorCollider != null
+                ? arenaFloorCollider.bounds.center
+                : referencePosition;
+        arenaWorldCenter.y = referencePosition.y;
 
-        float derivedRadius = Mathf.Min(bounds.extents.x, bounds.extents.z) - arenaEdgePadding;
-        bullArenaRadius = Mathf.Max(1.5f, Mathf.Min(bullArenaRadius, derivedRadius));
+        float derivedRadius = bullArenaRadius;
+        if (arenaBoundaryCollider != null)
+        {
+            Bounds bounds = arenaBoundaryCollider.bounds;
+            derivedRadius = Mathf.Min(bounds.extents.x, bounds.extents.z) - arenaEdgePadding;
+        }
+        else if (arenaFloorCollider != null)
+        {
+            Bounds bounds = arenaFloorCollider.bounds;
+            derivedRadius = Mathf.Min(bounds.extents.x, bounds.extents.z) - arenaEdgePadding;
+            derivedRadius = Mathf.Min(derivedRadius, bullArenaRadius);
+        }
+
+        bullArenaRadius = Mathf.Max(1.5f, derivedRadius);
     }
 
     private void AdjustArenaColliders()
@@ -256,7 +306,7 @@ public class BullfightSpawnManager : MonoBehaviour
         if (arenaRoot == null)
             return;
 
-        BoxCollider[] colliders = arenaRoot.GetComponentsInChildren<BoxCollider>(true);
+        BoxCollider[] colliders = arenaRoot.GetComponentsInChildren<BoxCollider>(false);
         foreach (BoxCollider box in colliders)
         {
             Vector3 size = box.size;
@@ -293,7 +343,7 @@ public class BullfightSpawnManager : MonoBehaviour
         int bestScore = 0;
         foreach (GameObject root in gameObject.scene.GetRootGameObjects())
         {
-            int score = root.GetComponentsInChildren<BoxCollider>(true).Length;
+            int score = root.GetComponentsInChildren<BoxCollider>(false).Length;
             if (score > bestScore)
             {
                 best = root;
@@ -304,30 +354,89 @@ public class BullfightSpawnManager : MonoBehaviour
         return best;
     }
 
-    private BoxCollider FindLargestArenaFloorCollider()
+    private Collider FindLargestArenaFloorCollider(Vector3 referencePosition)
     {
-        GameObject arenaRoot = FindArenaRoot();
-        if (arenaRoot == null)
-            return null;
-
-        BoxCollider best = null;
+        Collider best = null;
         float bestArea = -1f;
 
-        foreach (BoxCollider box in arenaRoot.GetComponentsInChildren<BoxCollider>(true))
+        Collider[] colliders = Resources.FindObjectsOfTypeAll<Collider>();
+        for (int index = 0; index < colliders.Length; index++)
         {
-            if (box == null || !box.enabled)
+            Collider collider = colliders[index];
+            if (!IsArenaCandidateCollider(collider))
                 continue;
 
-            Bounds bounds = box.bounds;
+            Bounds bounds = collider.bounds;
+            if (bounds.size.y > 1.25f || !ContainsReferenceInHorizontalBounds(bounds, referencePosition))
+                continue;
+
             float area = bounds.size.x * bounds.size.z;
             if (area <= bestArea)
                 continue;
 
-            best = box;
+            best = collider;
             bestArea = area;
         }
 
         return best;
+    }
+
+    private Collider FindArenaBoundaryCollider(Vector3 referencePosition)
+    {
+        Collider best = null;
+        float bestRadius = float.MaxValue;
+
+        Collider[] colliders = Resources.FindObjectsOfTypeAll<Collider>();
+        for (int index = 0; index < colliders.Length; index++)
+        {
+            Collider collider = colliders[index];
+            if (!IsArenaCandidateCollider(collider))
+                continue;
+
+            Bounds bounds = collider.bounds;
+            if (bounds.size.y <= 1.25f || !ContainsReferenceInHorizontalBounds(bounds, referencePosition))
+                continue;
+
+            float radius = Mathf.Min(bounds.extents.x, bounds.extents.z);
+            if (radius <= 1.5f || radius >= bestRadius)
+                continue;
+
+            best = collider;
+            bestRadius = radius;
+        }
+
+        return best;
+    }
+
+    private bool IsArenaCandidateCollider(Collider collider)
+    {
+        if (collider == null || !collider.enabled || collider.isTrigger)
+            return false;
+
+        GameObject colliderObject = collider.gameObject;
+        if (colliderObject == null || !colliderObject.activeInHierarchy || !colliderObject.scene.IsValid())
+            return false;
+
+        Transform colliderTransform = collider.transform;
+        if (colliderTransform == null)
+            return false;
+
+        if (playerStats != null && (colliderTransform == playerStats.transform || colliderTransform.IsChildOf(playerStats.transform)))
+            return false;
+
+        if (bullAI != null && (colliderTransform == bullAI.transform || colliderTransform.IsChildOf(bullAI.transform)))
+            return false;
+
+        return true;
+    }
+
+    private static bool ContainsReferenceInHorizontalBounds(Bounds bounds, Vector3 referencePosition)
+    {
+        const float horizontalPadding = 0.05f;
+        return referencePosition.x >= bounds.min.x - horizontalPadding &&
+               referencePosition.x <= bounds.max.x + horizontalPadding &&
+               referencePosition.z >= bounds.min.z - horizontalPadding &&
+               referencePosition.z <= bounds.max.z + horizontalPadding;
     }
 
     private Vector3 SampleGround(Vector3 preferredPosition, Transform ignoredRoot)

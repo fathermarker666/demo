@@ -128,6 +128,7 @@ public sealed class BullfightArcadeScoring
     private int pendingBanderillasAttempts;
     private float banderillasMissResolveAt = -1f;
     private bool phaseOneNoDamage = true;
+    private bool pendingPhaseOneChargeMissPenalty;
     private bool phaseTwoHadLoss;
     private bool bullKillBonusAwarded;
     private bool runActive;
@@ -486,6 +487,7 @@ public sealed class BullfightArcadeScoring
         phaseOneSummaryCommitted = false;
         phaseOneTimedOut = false;
         phaseOneNoDamage = true;
+        pendingPhaseOneChargeMissPenalty = false;
         phaseTwoHadLoss = false;
         bullKillBonusAwarded = false;
         pendingBanderillasAttempts = 0;
@@ -496,6 +498,8 @@ public sealed class BullfightArcadeScoring
     {
         if (!ShouldTrackPhaseOneCombat() || resolution == null)
             return;
+
+        pendingPhaseOneChargeMissPenalty = false;
 
         if (string.Equals(resolution.Result, "Perfect!", StringComparison.Ordinal))
         {
@@ -509,10 +513,10 @@ public sealed class BullfightArcadeScoring
             return;
         }
 
-        if (resolution.PlayerDashedDuringCharge && !resolution.PlayerTookDamage)
+        if (!resolution.PlayerTookDamage)
             return;
 
-        AddScoredEvent("PHASE_ONE_MISS", "CAPA MISS", PhaseOneMissPoints, false, true, "Miss", ArcadeScoreSourceAnchor.Judge);
+        pendingPhaseOneChargeMissPenalty = true;
     }
 
     private void HandleDashPerformed()
@@ -586,6 +590,21 @@ public sealed class BullfightArcadeScoring
             return;
 
         phaseOneNoDamage = false;
+
+        if (pendingPhaseOneChargeMissPenalty)
+        {
+            pendingPhaseOneChargeMissPenalty = false;
+            AddScoredEvent(
+                "PHASE_ONE_MISS",
+                "CAPA MISS",
+                PhaseOneMissPoints,
+                false,
+                true,
+                "Miss",
+                ArcadeScoreSourceAnchor.Judge);
+            return;
+        }
+
         AddScoredEvent(
             "PLAYER_HIT",
             "PLAYER HIT",
