@@ -67,7 +67,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
     private Character shooterCharacter;
     private HandState? currentState;
     private HandState? transientState;
-    private float transientStateUntil = -1f;
+    private float transientStateRemaining = -1f;
     private bool bindingsCached;
     private bool subscribed;
     private readonly List<Animator> disabledConflictingAnimators = new List<Animator>();
@@ -140,14 +140,23 @@ public class BullfightHandAnimatorController : MonoBehaviour
         if (!subscribed && playerStats != null)
             Subscribe();
 
+        RefreshAnimatorPlaybackTiming();
+
         if (handAnimator == null || !bindingsCached)
             return;
 
         if (playerController != null && playerController.IsPhaseTwoStabPressedThisFrame())
             PlayTransient(HandState.UseSword);
 
-        if (transientState.HasValue && Time.time >= transientStateUntil)
-            transientState = null;
+        if (transientState.HasValue)
+        {
+            transientStateRemaining -= GetAnimatorPlaybackDeltaTime();
+            if (transientStateRemaining <= 0f)
+            {
+                transientState = null;
+                transientStateRemaining = -1f;
+            }
+        }
 
         SwitchState(ResolveDesiredState(), restart: false);
         UpdateThrowSpawn();
@@ -255,10 +264,9 @@ public class BullfightHandAnimatorController : MonoBehaviour
         if (handAnimator != null)
         {
             handAnimator.enabled = true;
-            handAnimator.speed = 1f;
             handAnimator.applyRootMotion = false;
             handAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-            handAnimator.updateMode = AnimatorUpdateMode.Normal;
+            ApplyAnimatorPlaybackTiming(handAnimator);
 
             if (presentationRoot != null && handAnimator.transform.parent == presentationRoot)
                 SetLayerRecursively(handAnimator.transform, presentationRoot.gameObject.layer);
@@ -353,7 +361,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
             return;
 
         transientState = null;
-        transientStateUntil = -1f;
+        transientStateRemaining = -1f;
         SwitchState(HandState.Death, restart: true);
     }
 
@@ -378,10 +386,60 @@ public class BullfightHandAnimatorController : MonoBehaviour
             return;
 
         transientState = state;
-        transientStateUntil = Time.time + Mathf.Max(0.05f, binding.ClipLength);
+        transientStateRemaining = Mathf.Max(0.05f, binding.ClipLength);
         if (state == HandState.Throw)
             throwSpawnTriggered = false;
         SwitchState(state, restart: true);
+    }
+
+    private void RefreshAnimatorPlaybackTiming()
+    {
+        ApplyAnimatorPlaybackTiming(handAnimator);
+
+        if (adoptedRigRoot == null)
+            return;
+
+        Animator adoptedAnimator = adoptedRigRoot.GetComponent<Animator>();
+        if (adoptedAnimator != handAnimator)
+            ApplyAnimatorPlaybackTiming(adoptedAnimator);
+    }
+
+    private void ApplyAnimatorPlaybackTiming(Animator animator)
+    {
+        if (animator == null)
+            return;
+
+        animator.speed = GetAnimatorPlaybackSpeed();
+        animator.updateMode = AnimatorUpdateMode.Normal;
+    }
+
+    private float GetAnimatorPlaybackSpeed()
+    {
+        if (!ShouldCompensatePhaseTwoHandAnimation())
+            return 1f;
+
+        float timeScale = Time.timeScale;
+        if (timeScale <= 0.0001f)
+            return 1f;
+
+        return 1f / timeScale;
+    }
+
+    private float GetAnimatorPlaybackDeltaTime()
+    {
+        if (BullfightPauseSettingsUI.Instance != null && BullfightPauseSettingsUI.Instance.IsPauseMenuOpen)
+            return 0f;
+
+        return ShouldCompensatePhaseTwoHandAnimation()
+            ? Time.unscaledDeltaTime
+            : Time.deltaTime;
+    }
+
+    private bool ShouldCompensatePhaseTwoHandAnimation()
+    {
+        return gameFlow != null &&
+               gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo &&
+               (BullfightPauseSettingsUI.Instance == null || !BullfightPauseSettingsUI.Instance.IsPauseMenuOpen);
     }
 
     private HandState ResolveDesiredState()
@@ -567,10 +625,9 @@ public class BullfightHandAnimatorController : MonoBehaviour
         UpdateAdoptedRigPropVisibility(externalRig);
 
         externalHandAnimator.enabled = true;
-        externalHandAnimator.speed = 1f;
         externalHandAnimator.applyRootMotion = false;
         externalHandAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-        externalHandAnimator.updateMode = AnimatorUpdateMode.Normal;
+        ApplyAnimatorPlaybackTiming(externalHandAnimator);
     }
 
     private Animator ResolveAdoptedHandAnimator(Transform presentationRoot)

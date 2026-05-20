@@ -5,6 +5,7 @@ public class BullfightSpawnManager : MonoBehaviour
 {
     [Header("Names")]
     public string arenaRootName = "";
+    public string arenaBoundaryName = "Pipe";
     public string playerSpawnName = "PlayerSpawnPoint";
     public string bullSpawnName = "BullSpawnPoint";
 
@@ -24,12 +25,14 @@ public class BullfightSpawnManager : MonoBehaviour
     public float bullArenaRadius = 4.1f;
     public float arenaEdgePadding = 0.25f;
     public float spawnEdgePadding = 0.25f;
+    public float boundaryBounceSpeed = 4.5f;
 
     public PlayerStats playerStats;
     public BullAI bullAI;
 
     private Rigidbody playerRigidbody;
     private Rigidbody bullRigidbody;
+    private CapsuleCollider playerCapsuleCollider;
     private Transform playerSpawnPoint;
     private Transform bullSpawnPoint;
     private Collider arenaFloorCollider;
@@ -99,36 +102,145 @@ public class BullfightSpawnManager : MonoBehaviour
 
     public bool KeepPlayerInsideArena(float overflowTolerance = 0.35f, float snapPadding = 0.1f)
     {
-        Vector3 center = ArenaCenter;
-        Vector3 flatOffset = new Vector3(transform.position.x - center.x, 0f, transform.position.z - center.z);
-        float maxAllowedRadius = Mathf.Max(1f, bullArenaRadius + Mathf.Max(0f, overflowTolerance));
-        if (flatOffset.sqrMagnitude <= maxAllowedRadius * maxAllowedRadius)
-            return false;
+        Vector3 currentPosition = playerRigidbody != null && !playerRigidbody.isKinematic
+            ? playerRigidbody.position
+            : transform.position;
 
-        if (flatOffset.sqrMagnitude <= 0.0001f)
+        if (!TryGetPlayerWallPadding(snapPadding, out float wallPadding))
+            wallPadding = Mathf.Max(0.05f, snapPadding);
+
+        if (!TryClampPlayerPositionToBoundary(currentPosition, wallPadding, out Vector3 correctedPosition, out Vector3 outwardDirection))
             return false;
 
         BullfightPlayerController controller = playerStats != null ? playerStats.GetComponent<BullfightPlayerController>() : null;
         controller?.ClearInputBuffers();
         controller?.ForceStopMovement();
 
-        float targetRadius = Mathf.Max(0.5f, bullArenaRadius - Mathf.Max(0f, snapPadding));
-        Vector3 clampedOffset = flatOffset.normalized * targetRadius;
-        Vector3 correctedPosition = new Vector3(center.x + clampedOffset.x, transform.position.y, center.z + clampedOffset.z);
-
         if (playerRigidbody == null)
             playerRigidbody = GetComponent<Rigidbody>();
 
         if (playerRigidbody != null)
         {
-            Vector3 velocity = playerRigidbody.velocity;
-            velocity.x = 0f;
-            velocity.z = 0f;
+            Vector3 velocity = Vector3.Project(playerRigidbody.velocity, Vector3.up);
+            velocity += (-outwardDirection) * Mathf.Max(0f, boundaryBounceSpeed);
             playerRigidbody.velocity = velocity;
             playerRigidbody.position = correctedPosition;
         }
 
         transform.position = correctedPosition;
+        return true;
+    }
+
+    public bool ConstrainPlayerMotionDelta(Vector3 currentPosition, Vector3 requestedDelta, bool allowWallSlide, float skinWidth, out Vector3 constrainedDelta)
+    {
+        constrainedDelta = requestedDelta;
+        if (requestedDelta.sqrMagnitude <= 0.000001f)
+            return false;
+
+        ResolveReferencesIfNeeded();
+        if (arenaBoundaryCollider == null)
+            CacheArenaBounds();
+
+        if (!TryGetPlayerWallPadding(skinWidth, out float wallPadding))
+            return false;
+
+        Vector3 requestedTarget = currentPosition + requestedDelta;
+        if (!TryClampPlayerPositionToBoundary(requestedTarget, wallPadding, out Vector3 clampedTarget, out Vector3 outwardDirection))
+            return false;
+
+        if (allowWallSlide)
+        {
+            Vector3 slideDelta = Vector3.ProjectOnPlane(requestedDelta, outwardDirection);
+            if (slideDelta.sqrMagnitude > 0.000001f)
+            {
+                Vector3 slideTarget = currentPosition + slideDelta;
+                if (!TryClampPlayerPositionToBoundary(slideTarget, wallPadding, out _, out _))
+                {
+                    constrainedDelta = slideDelta;
+                    return true;
+                }
+            }
+        }
+
+        constrainedDelta = clampedTarget - currentPosition;
+        return true;
+    }
+
+    public bool ResolvePlayerWallOverlap(float extraBuffer = 0.02f, float inwardBias = 0.02f)
+    {
+        ResolveReferencesIfNeeded();
+        if (arenaBoundaryCollider == null)
+            CacheArenaBounds();
+
+        if (arenaBoundaryCollider == null)
+            return false;
+
+        if (playerCapsuleCollider == null)
+            playerCapsuleCollider = GetComponent<CapsuleCollider>();
+
+        if (playerCapsuleCollider == null || !playerCapsuleCollider.enabled)
+            return false;
+
+        if (playerRigidbody == null)
+            playerRigidbody = GetComponent<Rigidbody>();
+
+        Vector3 currentPosition = playerRigidbody != null && !playerRigidbody.isKinematic
+            ? playerRigidbody.position
+            : transform.position;
+        Quaternion currentRotation = playerRigidbody != null && !playerRigidbody.isKinematic
+            ? playerRigidbody.rotation
+            : transform.rotation;
+
+        bool moved = false;
+        for (int iteration = 0; iteration < 4; iteration++)
+        {
+            if (!Physics.ComputePenetration(
+                    arenaBoundaryCollider,
+                    arenaBoundaryCollider.transform.position,
+                    arenaBoundaryCollider.transform.rotation,
+                    playerCapsuleCollider,
+                    currentPosition,
+                    currentRotation,
+                    out Vector3 separationDirection,
+                    out float separationDistance))
+            {
+                break;
+            }
+
+            Vector3 inwardDirection = GetArenaInwardDirection(currentPosition);
+            Vector3 correctionDirection = -separationDirection;
+            correctionDirection.y = 0f;
+            if (correctionDirection.sqrMagnitude <= 0.0001f)
+            {
+                correctionDirection = inwardDirection;
+            }
+            else
+            {
+                correctionDirection.Normalize();
+                if (Vector3.Dot(correctionDirection, inwardDirection) < 0f)
+                    correctionDirection = inwardDirection;
+                else
+                    correctionDirection = (correctionDirection + inwardDirection * 0.35f).normalized;
+            }
+
+            currentPosition += correctionDirection * Mathf.Max(0.01f, separationDistance + Mathf.Max(0f, extraBuffer));
+            moved = true;
+        }
+
+        if (TryGetPlayerWallPadding(extraBuffer, out float wallPadding) &&
+            TryClampPlayerPositionToBoundary(currentPosition, wallPadding + Mathf.Max(0f, inwardBias), out Vector3 clampedPosition, out _))
+        {
+            currentPosition = clampedPosition;
+            moved = true;
+        }
+
+        if (!moved)
+            return false;
+
+        if (playerRigidbody != null && !playerRigidbody.isKinematic)
+            playerRigidbody.position = currentPosition;
+
+        transform.position = currentPosition;
         return true;
     }
 
@@ -284,8 +396,14 @@ public class BullfightSpawnManager : MonoBehaviour
         float derivedRadius = bullArenaRadius;
         if (arenaBoundaryCollider != null)
         {
-            Bounds bounds = arenaBoundaryCollider.bounds;
-            derivedRadius = Mathf.Min(bounds.extents.x, bounds.extents.z) - arenaEdgePadding;
+            float sampledRadius = SampleArenaBoundaryRadius(referencePosition);
+            if (sampledRadius > 0f)
+                derivedRadius = sampledRadius - arenaEdgePadding;
+            else
+            {
+                Bounds bounds = arenaBoundaryCollider.bounds;
+                derivedRadius = Mathf.Min(bounds.extents.x, bounds.extents.z) - arenaEdgePadding;
+            }
         }
         else if (arenaFloorCollider != null)
         {
@@ -383,6 +501,10 @@ public class BullfightSpawnManager : MonoBehaviour
 
     private Collider FindArenaBoundaryCollider(Vector3 referencePosition)
     {
+        Collider namedBoundary = FindNamedArenaBoundaryCollider();
+        if (namedBoundary != null)
+            return namedBoundary;
+
         Collider best = null;
         float bestRadius = float.MaxValue;
 
@@ -406,6 +528,30 @@ public class BullfightSpawnManager : MonoBehaviour
         }
 
         return best;
+    }
+
+    private Collider FindNamedArenaBoundaryCollider()
+    {
+        if (string.IsNullOrWhiteSpace(arenaBoundaryName))
+            return null;
+
+        GameObject boundaryObject = BullfightSceneCache.FindSceneObjectByName<GameObject>(arenaBoundaryName);
+        if (boundaryObject == null || !boundaryObject.activeInHierarchy)
+            return null;
+
+        Collider boundaryCollider = boundaryObject.GetComponent<Collider>();
+        if (IsArenaCandidateCollider(boundaryCollider))
+            return boundaryCollider;
+
+        Collider[] childColliders = boundaryObject.GetComponentsInChildren<Collider>(false);
+        for (int index = 0; index < childColliders.Length; index++)
+        {
+            Collider childCollider = childColliders[index];
+            if (IsArenaCandidateCollider(childCollider))
+                return childCollider;
+        }
+
+        return null;
     }
 
     private bool IsArenaCandidateCollider(Collider collider)
@@ -437,6 +583,157 @@ public class BullfightSpawnManager : MonoBehaviour
                referencePosition.x <= bounds.max.x + horizontalPadding &&
                referencePosition.z >= bounds.min.z - horizontalPadding &&
                referencePosition.z <= bounds.max.z + horizontalPadding;
+    }
+
+    private float SampleArenaBoundaryRadius(Vector3 referencePosition)
+    {
+        if (arenaBoundaryCollider == null)
+            return -1f;
+
+        const int sampleCount = 32;
+        float bestDistance = float.MaxValue;
+        for (int index = 0; index < sampleCount; index++)
+        {
+            float angle = (Mathf.PI * 2f * index) / sampleCount;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+            if (!TryGetArenaBoundaryHit(referencePosition.y, direction, out RaycastHit hit))
+                continue;
+
+            if (hit.distance < bestDistance)
+                bestDistance = hit.distance;
+        }
+
+        return bestDistance < float.MaxValue ? bestDistance : -1f;
+    }
+
+    private bool TryClampPositionToArena(Vector3 position, float overflowTolerance, float snapPadding, out Vector3 correctedPosition, out Vector3 inwardDirection)
+    {
+        Vector3 center = ArenaCenter;
+        Vector3 flatOffset = new Vector3(position.x - center.x, 0f, position.z - center.z);
+        correctedPosition = position;
+        inwardDirection = Vector3.zero;
+
+        if (flatOffset.sqrMagnitude <= 0.0001f)
+            return false;
+
+        Vector3 outwardDirection = flatOffset.normalized;
+        if (TryGetArenaBoundaryHit(position.y, outwardDirection, out RaycastHit boundaryHit))
+        {
+            float currentDistance = flatOffset.magnitude;
+            float maxDistance = Mathf.Max(0.5f, boundaryHit.distance - Mathf.Max(0.05f, snapPadding));
+            if (currentDistance <= maxDistance + Mathf.Max(0f, overflowTolerance))
+                return false;
+
+            inwardDirection = -outwardDirection;
+            correctedPosition = boundaryHit.point + inwardDirection * Mathf.Max(0.1f, snapPadding);
+            correctedPosition.y = position.y;
+            return true;
+        }
+
+        float maxAllowedRadius = Mathf.Max(1f, bullArenaRadius + Mathf.Max(0f, overflowTolerance));
+        if (flatOffset.sqrMagnitude <= maxAllowedRadius * maxAllowedRadius)
+            return false;
+
+        inwardDirection = -outwardDirection;
+        float targetRadius = Mathf.Max(0.5f, bullArenaRadius - Mathf.Max(0f, snapPadding));
+        Vector3 clampedOffset = outwardDirection * targetRadius;
+        correctedPosition = new Vector3(center.x + clampedOffset.x, position.y, center.z + clampedOffset.z);
+        return true;
+    }
+
+    private bool TryGetArenaBoundaryHit(float sampleY, Vector3 horizontalDirection, out RaycastHit hit)
+    {
+        hit = default;
+        if (arenaBoundaryCollider == null)
+            return false;
+
+        Vector3 direction = new Vector3(horizontalDirection.x, 0f, horizontalDirection.z);
+        if (direction.sqrMagnitude <= 0.0001f)
+            return false;
+
+        direction.Normalize();
+        Bounds bounds = arenaBoundaryCollider.bounds;
+        float clampedY = Mathf.Clamp(sampleY, bounds.min.y + 0.05f, bounds.max.y - 0.05f);
+        Vector3 center = ArenaCenter;
+        Vector3 origin = new Vector3(center.x, clampedY, center.z);
+        float maxDistance = Mathf.Max(bounds.size.x, bounds.size.z) + 4f;
+        return arenaBoundaryCollider.Raycast(new Ray(origin, direction), out hit, maxDistance);
+    }
+
+    private bool TryClampPlayerPositionToBoundary(Vector3 position, float padding, out Vector3 correctedPosition, out Vector3 outwardDirection)
+    {
+        correctedPosition = position;
+        outwardDirection = Vector3.zero;
+
+        Vector3 center = ArenaCenter;
+        Vector3 flatOffset = new Vector3(position.x - center.x, 0f, position.z - center.z);
+        if (flatOffset.sqrMagnitude <= 0.0001f)
+            return false;
+
+        outwardDirection = flatOffset.normalized;
+        float allowedDistance = GetAllowedBoundaryDistance(position.y, outwardDirection, padding);
+        if (flatOffset.magnitude <= allowedDistance)
+            return false;
+
+        correctedPosition = new Vector3(
+            center.x + outwardDirection.x * allowedDistance,
+            position.y,
+            center.z + outwardDirection.z * allowedDistance);
+        return true;
+    }
+
+    private float GetAllowedBoundaryDistance(float sampleY, Vector3 outwardDirection, float padding)
+    {
+        float allowedDistance = Mathf.Max(0.25f, bullArenaRadius - Mathf.Max(0f, padding));
+        if (TryGetArenaBoundaryHit(sampleY, outwardDirection, out RaycastHit boundaryHit))
+            allowedDistance = Mathf.Max(0.25f, boundaryHit.distance - Mathf.Max(0f, padding));
+
+        return allowedDistance;
+    }
+
+    private bool TryGetPlayerWallPadding(float skinWidth, out float wallPadding)
+    {
+        if (playerCapsuleCollider == null)
+            playerCapsuleCollider = GetComponent<CapsuleCollider>();
+
+        if (playerCapsuleCollider == null || !playerCapsuleCollider.enabled)
+        {
+            wallPadding = 0f;
+            return false;
+        }
+
+        wallPadding = GetCapsuleWorldRadius(playerCapsuleCollider) + Mathf.Max(0.005f, skinWidth);
+        return true;
+    }
+
+    private Vector3 GetArenaInwardDirection(Vector3 currentPosition)
+    {
+        Vector3 inward = ArenaCenter - currentPosition;
+        inward.y = 0f;
+        if (inward.sqrMagnitude > 0.0001f)
+            return inward.normalized;
+
+        return Vector3.back;
+    }
+
+    private static float GetCapsuleWorldRadius(CapsuleCollider capsule)
+    {
+        if (capsule == null)
+            return 0f;
+
+        Vector3 scale = capsule.transform.lossyScale;
+        float scaleX = Mathf.Abs(scale.x);
+        float scaleY = Mathf.Abs(scale.y);
+        float scaleZ = Mathf.Abs(scale.z);
+
+        float radiusScale = capsule.direction switch
+        {
+            0 => Mathf.Max(scaleY, scaleZ),
+            2 => Mathf.Max(scaleX, scaleY),
+            _ => Mathf.Max(scaleX, scaleZ)
+        };
+
+        return capsule.radius * radiusScale;
     }
 
     private Vector3 SampleGround(Vector3 preferredPosition, Transform ignoredRoot)
@@ -485,6 +782,9 @@ public class BullfightSpawnManager : MonoBehaviour
 
     private Vector3 ClampToArena(Vector3 position, float padding = 0f)
     {
+        if (TryClampPositionToArena(position, 0f, padding, out Vector3 correctedPosition, out _))
+            return correctedPosition;
+
         Vector3 center = ArenaCenter;
         Vector3 flatOffset = new Vector3(position.x - center.x, 0f, position.z - center.z);
         float clampedRadius = Mathf.Max(1f, bullArenaRadius - padding);
@@ -515,6 +815,9 @@ public class BullfightSpawnManager : MonoBehaviour
     {
         if (playerStats == null)
             playerStats = BullfightSceneCache.GetLocalOrScene<PlayerStats>(this);
+
+        if (playerCapsuleCollider == null)
+            playerCapsuleCollider = GetComponent<CapsuleCollider>();
 
         if (bullAI == null)
             bullAI = BullfightSceneCache.FindObject<BullAI>();

@@ -1549,16 +1549,26 @@ public class BullAI : MonoBehaviour
         return Vector3.back;
     }
 
-    private static void PushPlayerCollider(Collider activePlayerCollider, Vector3 delta)
+    private void PushPlayerCollider(Collider activePlayerCollider, Vector3 delta)
     {
         if (activePlayerCollider == null || delta.sqrMagnitude <= 0.000001f)
             return;
 
         Rigidbody attachedBody = activePlayerCollider.attachedRigidbody;
+        Vector3 startPosition = attachedBody != null && !attachedBody.isKinematic
+            ? attachedBody.position
+            : activePlayerCollider.transform.position;
+
+        if (spawnManager != null)
+            spawnManager.ConstrainPlayerMotionDelta(startPosition, delta, false, 0.02f, out delta);
+
+        Vector3 targetPosition = startPosition + delta;
         if (attachedBody != null && !attachedBody.isKinematic)
-            attachedBody.MovePosition(attachedBody.position + delta);
+            attachedBody.MovePosition(targetPosition);
         else
-            activePlayerCollider.transform.position += delta;
+            activePlayerCollider.transform.position = targetPosition;
+
+        spawnManager?.ResolvePlayerWallOverlap(0.02f, 0.02f);
     }
 
     private bool CanAttemptChargeDamage()

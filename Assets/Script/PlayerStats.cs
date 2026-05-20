@@ -8,6 +8,10 @@ using System.Reflection;
 
 public class PlayerStats : MonoBehaviour
 {
+    private const float PlayerWallSkinWidth = 0.02f;
+    private const float PlayerWallOverlapBuffer = 0.02f;
+    private const float PlayerWallInwardBias = 0.02f;
+
     public event Action OnCapaPerformed;
     public event Action OnDashPerformed;
     public event Action OnEvadePerformed;
@@ -81,6 +85,7 @@ public class PlayerStats : MonoBehaviour
     private BullfightGameFlow gameFlow;
     private CameraLook cameraLook;
     private Movement movementComponent;
+    private BullfightSpawnManager spawnManager;
     private bool shooterGameplayEnabled = true;
     private bool deathPresentationApplied;
     private bool cachedGameplayNearClip;
@@ -147,6 +152,8 @@ public class PlayerStats : MonoBehaviour
         isTaunting = false;
         isHoldingCloth = false;
         rigidBody = GetComponent<Rigidbody>();
+        if (rigidBody != null)
+            rigidBody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         _ = GetComponent<BullfightPlayerController>() ?? gameObject.AddComponent<BullfightPlayerController>();
         _ = GetComponent<BullfightCapeBinder>() ?? gameObject.AddComponent<BullfightCapeBinder>();
         _ = GetComponent<BullfightSpawnManager>() ?? gameObject.AddComponent<BullfightSpawnManager>();
@@ -160,6 +167,7 @@ public class PlayerStats : MonoBehaviour
         handAnimatorController = GetComponent<BullfightHandAnimatorController>();
         shooterCharacter = GetComponent<Character>();
         movementComponent = GetComponent<Movement>();
+        spawnManager = GetComponent<BullfightSpawnManager>();
         playerController = GetComponent<BullfightPlayerController>();
         playerController?.ConfigureInputActions(bullfightActionsAsset);
         bullAI = FindObjectOfType<BullAI>(true);
@@ -180,6 +188,17 @@ public class PlayerStats : MonoBehaviour
 
     }
 
+    private void FixedUpdate()
+    {
+        if (mainMenuFrozen)
+            return;
+
+        UpdateDash();
+        UpdateKnockback();
+        spawnManager ??= GetComponent<BullfightSpawnManager>();
+        spawnManager?.ResolvePlayerWallOverlap(PlayerWallOverlapBuffer, PlayerWallInwardBias);
+    }
+
     private void Update()
     {
         if (mainMenuFrozen)
@@ -191,8 +210,6 @@ public class PlayerStats : MonoBehaviour
 
         UpdateStun();
         UpdateInvulnerability();
-        UpdateDash();
-        UpdateKnockback();
         UpdatePerfectDodgeBuff();
         UpdateStamina();
         UpdateHoldingClothCameraLock();
@@ -584,13 +601,9 @@ public class PlayerStats : MonoBehaviour
         if (dashTimer <= 0f)
             return;
 
-        Vector3 delta = dashVelocity * Time.deltaTime;
-        if (rigidBody != null && !rigidBody.isKinematic)
-            rigidBody.MovePosition(rigidBody.position + delta);
-        else
-            transform.position += delta;
-
-        dashTimer -= Time.deltaTime;
+        float step = Mathf.Min(Time.fixedDeltaTime, dashTimer);
+        ApplySpecialMotionDelta(dashVelocity * step, true);
+        dashTimer = Mathf.Max(0f, dashTimer - step);
         if (dashTimer > 0f)
             return;
 
@@ -634,13 +647,9 @@ public class PlayerStats : MonoBehaviour
         if (knockbackTimer <= 0f)
             return;
 
-        Vector3 delta = knockbackVelocity * Time.deltaTime;
-        if (rigidBody != null && !rigidBody.isKinematic)
-            rigidBody.MovePosition(rigidBody.position + delta);
-        else
-            transform.position += delta;
-
-        knockbackTimer -= Time.deltaTime;
+        float step = Mathf.Min(Time.fixedDeltaTime, knockbackTimer);
+        ApplySpecialMotionDelta(knockbackVelocity * step, false);
+        knockbackTimer = Mathf.Max(0f, knockbackTimer - step);
     }
 
     private void ApplyKnockback(Vector3 sourcePosition, float distance, float duration)
@@ -653,6 +662,32 @@ public class PlayerStats : MonoBehaviour
         direction.Normalize();
         knockbackVelocity = direction * (distance / Mathf.Max(0.01f, duration));
         knockbackTimer = duration;
+    }
+
+    private void ApplySpecialMotionDelta(Vector3 delta, bool allowWallSlide)
+    {
+        if (delta.sqrMagnitude <= 0.000001f)
+            return;
+
+        spawnManager ??= GetComponent<BullfightSpawnManager>();
+        Vector3 constrainedDelta = delta;
+        if (spawnManager != null)
+            spawnManager.ConstrainPlayerMotionDelta(GetCurrentMotionPosition(), delta, allowWallSlide, PlayerWallSkinWidth, out constrainedDelta);
+
+        if (rigidBody != null && !rigidBody.isKinematic)
+            rigidBody.MovePosition(rigidBody.position + constrainedDelta);
+        else
+            transform.position += constrainedDelta;
+
+        spawnManager?.ResolvePlayerWallOverlap(PlayerWallOverlapBuffer, PlayerWallInwardBias);
+    }
+
+    private Vector3 GetCurrentMotionPosition()
+    {
+        if (rigidBody != null && !rigidBody.isKinematic)
+            return rigidBody.position;
+
+        return transform.position;
     }
 
     private void TriggerStun()
