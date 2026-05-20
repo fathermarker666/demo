@@ -4483,7 +4483,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c392fad3085d92c41bc09a7a0243cc1e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  portName: COM6
+  portName: COM8
   baudRate: 115200
   initialOpenDelay: 0.5
   reopenDelay: 1
