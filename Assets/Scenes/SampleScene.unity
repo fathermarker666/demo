@@ -4490,8 +4490,8 @@ MonoBehaviour:
   maxForceValue: 50
   calibrationCommand: CAL
   sensorSignalTimeout: 1.2
-  phaseOneHoldEnterDistanceCm: 25
-  phaseOneHoldExitDistanceCm: 32
+  phaseOneHoldEnterDeltaCm: 10
+  phaseOneHoldExitDeltaCm: -10
   phaseOneHoldSignalTimeout: 0.5
 --- !u!4 &513949636
 Transform:
