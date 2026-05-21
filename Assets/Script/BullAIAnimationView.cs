@@ -91,6 +91,7 @@ public sealed class BullAIAnimationView
             BullAI.BullState.Impact => "Arm_Bull|Hit_Front",
             BullAI.BullState.Hurt => "Arm_Bull|Hit_Middle",
             BullAI.BullState.PerfectReaction => "Arm_Bull|JumpStart_up",
+            BullAI.BullState.CloseRangeImpactReaction => "Arm_Bull|JumpStart_up",
             BullAI.BullState.Fatigued => fatigueClip,
             BullAI.BullState.CirclingReset => "Arm_Bull|Trot_F_IP",
             BullAI.BullState.Dead => "Arm_Bull|Death_L",

@@ -320,6 +320,10 @@ public partial class BullfightGameFlow : MonoBehaviour
     public KeyCode debugPhaseTwoKey = KeyCode.Alpha8;
     public KeyCode debugKillBullKey = KeyCode.Alpha9;
     public KeyCode debugKillPlayerKey = KeyCode.Alpha0;
+
+    [Header("Staff Shortcuts")]
+    public bool enableStaffHighScoreReset = true;
+    public KeyCode staffResetDailyHighScoreKey = KeyCode.BackQuote;
     public float debugPhaseTwoDamage = 200f;
     public float bullDeathEndingDelay = 1.5f;
 
@@ -2011,6 +2015,8 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private void HandleDebugShortcuts()
     {
+        HandleStaffShortcuts();
+
         if (!AreDebugShortcutsAvailable())
             return;
 
@@ -2039,6 +2045,21 @@ public partial class BullfightGameFlow : MonoBehaviour
             MarkArcadeRunDebugModified();
             playerStats.ForceDeathForDebug();
         }
+    }
+
+    private void HandleStaffShortcuts()
+    {
+        if (!enableStaffHighScoreReset)
+            return;
+
+        bool controlPressed = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        bool shiftPressed = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        if (!controlPressed || !shiftPressed || !Input.GetKeyDown(staffResetDailyHighScoreKey))
+            return;
+
+        EnsureArcadeScoring();
+        arcadeScoring?.ResetDailyHighScoreForStaff();
+        Debug.Log("Staff shortcut: daily high score reset.");
     }
 
     private static bool IsDevelopmentDebugEnvironment()
@@ -2905,25 +2926,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private void ReturnToStartMenuAfterEnding()
     {
-        ResetSceneForMainMenu();
-
-        BullfightStartMenu startMenu = FindObjectOfType<BullfightStartMenu>(true);
-        startMenu?.PrepareForDeferredShow();
-
-        ManualStartMenuController manualStartMenu = FindObjectOfType<ManualStartMenuController>(true);
-        if (manualStartMenu != null)
-        {
-            manualStartMenu.ReturnToMenu();
-            return;
-        }
-
-        if (startMenu == null)
-        {
-            GameObject startMenuObject = new("BullfightStartMenu");
-            startMenu = startMenuObject.AddComponent<BullfightStartMenu>();
-        }
-
-        startMenu.ResetAndShowMenu();
+        ReloadCurrentSceneToHomeMenu();
     }
 
     public void ResetSceneForMainMenu()
@@ -2932,6 +2935,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         ResetState();
         bullBleedVfx?.ClearBleeds();
         phaseTwoPresentation?.ExitPhaseTwo();
+        audioController?.StopAllAudio();
 
         Time.timeScale = 1f;
         ApplySkyboxForPhase(GamePhase.PhaseOne);

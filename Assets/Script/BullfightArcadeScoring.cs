@@ -91,6 +91,7 @@ public sealed class ArcadeRunSummary
 public sealed class BullfightArcadeScoring
 {
     private const string HighScorePrefKey = "BullfightArcadeHighScore";
+    private const string HighScoreDatePrefKey = "BullfightArcadeHighScore.Date";
     private const int PhaseOnePerfectCapaPoints = 900;
     private const int PhaseOneGoodCapaPoints = 600;
     private const int PhaseOneMissPoints = -500;
@@ -133,6 +134,8 @@ public sealed class BullfightArcadeScoring
     private bool bullKillBonusAwarded;
     private bool runActive;
     private bool arcadeEnabled;
+
+    public event Action<ArcadeScoreEvent> ScoreEventQueued;
 
     public BullfightArcadeScoring(BullfightGameFlow owner)
     {
@@ -422,6 +425,8 @@ public sealed class BullfightArcadeScoring
         if (!arcadeEnabled)
             return null;
 
+        EnsureDailyHighScoreBucketCurrent();
+
         if (endingType == BullfightGameFlow.EndingType.Mercy)
             MarkRunUnranked("Mercy");
 
@@ -439,6 +444,7 @@ public sealed class BullfightArcadeScoring
         {
             newHighScore = state.CurrentScore;
             isNewRecord = true;
+            PlayerPrefs.SetString(HighScoreDatePrefKey, GetCurrentDailyHighScoreStamp());
             PlayerPrefs.SetInt(HighScorePrefKey, newHighScore);
             PlayerPrefs.Save();
         }
@@ -464,8 +470,28 @@ public sealed class BullfightArcadeScoring
         };
     }
 
+    public void ResetDailyHighScoreForStaff()
+    {
+        string currentStamp = GetCurrentDailyHighScoreStamp();
+        PlayerPrefs.SetString(HighScoreDatePrefKey, currentStamp);
+        PlayerPrefs.SetInt(HighScorePrefKey, 0);
+        PlayerPrefs.Save();
+
+        state.PreviousHighScore = 0;
+        state.HighScore = state.IsLeaderboardEligible ? Mathf.Max(0, state.CurrentScore) : 0;
+
+        EnqueueUiEvent(new ArcadeScoreEvent
+        {
+            EventId = "STAFF_RESET_TOAST",
+            ToastText = "DAILY RECORD RESET",
+            SourceAnchor = ArcadeScoreSourceAnchor.Toast,
+            SuppressPopup = true
+        });
+    }
+
     private void ResetState(bool enabled)
     {
+        EnsureDailyHighScoreBucketCurrent();
         arcadeEnabled = enabled;
         runActive = enabled;
         state.CurrentScore = 0;
@@ -708,6 +734,7 @@ public sealed class BullfightArcadeScoring
             pendingUiEvents.Dequeue();
 
         pendingUiEvents.Enqueue(scoreEvent);
+        ScoreEventQueued?.Invoke(scoreEvent);
     }
 
     private void ApplyFlatScoreToCurrentPhase(int points, bool isClearBonus)
@@ -761,5 +788,22 @@ public sealed class BullfightArcadeScoring
             BullfightGameFlow.EndingType.Mercy => "MERCY ENDING",
             _ => "ARCADE RESULT"
         };
+    }
+
+    private void EnsureDailyHighScoreBucketCurrent()
+    {
+        string currentStamp = GetCurrentDailyHighScoreStamp();
+        string savedStamp = PlayerPrefs.GetString(HighScoreDatePrefKey, string.Empty);
+        if (string.Equals(savedStamp, currentStamp, StringComparison.Ordinal))
+            return;
+
+        PlayerPrefs.SetString(HighScoreDatePrefKey, currentStamp);
+        PlayerPrefs.SetInt(HighScorePrefKey, 0);
+        PlayerPrefs.Save();
+    }
+
+    private static string GetCurrentDailyHighScoreStamp()
+    {
+        return DateTime.Now.ToString("yyyyMMdd");
     }
 }

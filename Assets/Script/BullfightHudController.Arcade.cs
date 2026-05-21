@@ -238,7 +238,7 @@ public partial class BullfightHudController
         if (scoreEvent == null)
             return;
 
-        if (scoreEvent.EventId == "UNRANKED_TOAST")
+        if (scoreEvent.SourceAnchor == ArcadeScoreSourceAnchor.Toast || !string.IsNullOrEmpty(scoreEvent.ToastText))
         {
             arcadeToastTimer = 1.4f;
             if (arcadeToastText != null)

@@ -54,6 +54,7 @@ public class BullfightStartMenu : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float pressRumbleHighFrequency = 0.65f;
     [SerializeField] private float pressRumbleDuration = 0.12f;
     [SerializeField] private float confirmSuppressionDuration = 0.15f;
+    [SerializeField] private float selectionClipRetriggerCooldown = 0.12f;
 
     private Canvas canvas;
     private GameObject root;
@@ -67,6 +68,8 @@ public class BullfightStartMenu : MonoBehaviour
     private bool started;
     private Coroutine pressRumbleRoutine;
     private float suppressConfirmUntilUnscaledTime = -1f;
+    private AudioClip lastSelectionClip;
+    private float lastSelectionClipPlayedAt = -999f;
 
     public bool IsMenuVisible => canvas != null && canvas.gameObject.activeSelf;
 
@@ -192,6 +195,7 @@ public class BullfightStartMenu : MonoBehaviour
         BuildMenu();
         started = false;
         lastSelectedObject = null;
+        ResetSelectionAudioState();
         suppressConfirmUntilUnscaledTime = Time.unscaledTime + Mathf.Max(0.05f, confirmSuppressionDuration);
 
         if (root != null)
@@ -210,6 +214,7 @@ public class BullfightStartMenu : MonoBehaviour
             canvas.gameObject.SetActive(false);
 
         lastSelectedObject = null;
+        ResetSelectionAudioState();
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -305,6 +310,7 @@ public class BullfightStartMenu : MonoBehaviour
     {
         started = false;
         lastSelectedObject = null;
+        ResetSelectionAudioState();
         suppressConfirmUntilUnscaledTime = Time.unscaledTime + Mathf.Max(0.05f, confirmSuppressionDuration);
 
         ManualStartMenuController manualMenu = FindObjectOfType<ManualStartMenuController>(true);
@@ -373,7 +379,28 @@ public class BullfightStartMenu : MonoBehaviour
             selectionAudioSource.spatialBlend = 0f;
         }
 
-        selectionAudioSource.PlayOneShot(clip, focusClipVolume);
+        if (selectionAudioSource.isPlaying &&
+            lastSelectionClip == clip &&
+            Time.unscaledTime - lastSelectionClipPlayedAt < selectionClipRetriggerCooldown)
+        {
+            return;
+        }
+
+        selectionAudioSource.Stop();
+        selectionAudioSource.clip = clip;
+        selectionAudioSource.volume = focusClipVolume;
+        selectionAudioSource.pitch = 1f;
+        selectionAudioSource.Play();
+        lastSelectionClip = clip;
+        lastSelectionClipPlayedAt = Time.unscaledTime;
+    }
+
+    private void ResetSelectionAudioState()
+    {
+        lastSelectionClip = null;
+        lastSelectionClipPlayedAt = -999f;
+        if (selectionAudioSource != null)
+            selectionAudioSource.Stop();
     }
 
     private void OnStartButtonPressed()

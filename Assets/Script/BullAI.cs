@@ -34,7 +34,7 @@ public class BullAI : MonoBehaviour
     private const string AnimationTrotForwardInPlace = "Arm_Bull|Trot_F_IP";
     private const string AnimationTurnLeftInPlace = "Arm_Bull|Turn180_L_IP";
 
-    public enum BullState { Idle, Roaming, Engaging, Telegraphing, Charging, Impact, Hurt, PerfectReaction, Fatigued, CirclingReset, Dead }
+    public enum BullState { Idle, Roaming, Engaging, Telegraphing, Charging, Impact, Hurt, PerfectReaction, CloseRangeImpactReaction, Fatigued, CirclingReset, Dead }
 
     [Header("State")] public BullState currentState = BullState.Idle;
     [Header("References")] public Transform player; public PlayerStats playerStats; public BullfightPlayerController playerController; public BullStats bullStats; public BullTimingRing timingScript; public BullfightGameFlow gameFlow; public BullfightSpawnManager spawnManager;
@@ -50,7 +50,7 @@ public class BullAI : MonoBehaviour
     private float stateTimer, lastHitTime = -999f, engageTimer, attackRecoveryTimer, chargeStartedAt = -999f, telegraphStartDistance, telegraphTimer, chargeDuration, circlingAngle, circlingDirection = 1f, currentHorizontalMotion, autoAttackTimer, chargeQteTimer, chargeQteDuration;
     private float plannedChargeDistance, chargeLaneHalfWidth, displayedTelegraphTravelDistance;
     private int perfectReactionPhase;
-    private bool timingActive, canDamagePlayerThisCharge, pendingCircleReset, hasRoamTarget, hasQueuedMovePosition, hasQueuedMoveRotation, autoAttackPending, autoAttackCommitted, isPlayerInsideChargeLane, dashedThisCharge, impactCirclesAfterCharge, chargeHasEligibleTarget, chargeQteResolved, chargeResultAllowsDamage, externalChargeTimingControl, phaseTwoChargeMotionActive, chargeMissPlayerLockActive;
+    private bool timingActive, canDamagePlayerThisCharge, pendingCircleReset, hasRoamTarget, hasQueuedMovePosition, hasQueuedMoveRotation, autoAttackPending, autoAttackCommitted, isPlayerInsideChargeLane, dashedThisCharge, impactCirclesAfterCharge, chargeHasEligibleTarget, chargeQteResolved, chargeResultAllowsDamage, externalChargeTimingControl, phaseTwoChargeMotionActive, chargeMissPlayerLockActive, closeRangeImpactConsumedThisAttack;
     private bool tutorialControlActive, tutorialChargeDamageEnabled, tutorialChargeSequenceActive, tutorialChargeSequenceComplete, tutorialChargeHitPlayer, tutorialChargeUsesTiming;
     private bool pendingChargeTimingResolutionActive, pendingChargeTimingPlayerDashed, pendingChargeTimingWasTutorialTiming;
     private string tutorialChargeResult = string.Empty;
@@ -79,6 +79,7 @@ public class BullAI : MonoBehaviour
 
         currentState = BullState.Charging;
         ResetChargeQteState();
+        closeRangeImpactConsumedThisAttack = false;
         canDamagePlayerThisCharge = false;
         chargeResultAllowsDamage = false;
         chargeStartPosition = GetCurrentBullPosition();
@@ -257,6 +258,7 @@ public class BullAI : MonoBehaviour
             case BullState.Impact: UpdateImpact(); break;
             case BullState.Hurt: UpdateHurt(distance); break;
             case BullState.PerfectReaction: UpdatePerfectReaction(); break;
+            case BullState.CloseRangeImpactReaction: UpdateCloseRangeImpactReaction(); break;
             case BullState.Fatigued: UpdateFatigue(); break;
             case BullState.CirclingReset: UpdateCirclingReset(distance); break;
         }
@@ -305,6 +307,7 @@ public class BullAI : MonoBehaviour
         ConsumeAutoAttack();
         currentState = BullState.Telegraphing;
         ResetChargeQteState();
+        closeRangeImpactConsumedThisAttack = false;
         canDamagePlayerThisCharge = false;
         telegraphStartDistance = Mathf.Max(distance, telegraphRange);
         telegraphTimer = telegraphDuration;
@@ -326,6 +329,8 @@ public class BullAI : MonoBehaviour
     {
         telegraphTimer = Mathf.Max(0f, telegraphTimer - Time.deltaTime);
         FacePlayer();
+        if (TryApplyCloseRangeChargeFallback())
+            return;
         plannedChargeDistance = GetPlannedChargeDistance(HorizontalDistanceToPlayer());
         displayedTelegraphTravelDistance = GetTelegraphDisplayTravelDistance();
         chargeLaneHalfWidth = GetChargeLaneHalfWidth();
@@ -343,6 +348,9 @@ public class BullAI : MonoBehaviour
         MoveCharge(GetChargeSpeed());
         if (!dashedThisCharge && playerStats != null && playerStats.LastDashTime >= chargeStartedAt)
             dashedThisCharge = true;
+
+        if (TryApplyCloseRangeChargeFallback())
+            return;
 
         bool usesExternallyDrivenTutorialTiming = tutorialControlActive && tutorialChargeSequenceActive && tutorialChargeUsesTiming;
         if (!usesExternallyDrivenTutorialTiming &&
@@ -415,7 +423,23 @@ public class BullAI : MonoBehaviour
         if (perfectReactionPhase < 1)
         {
             perfectReactionPhase++;
-            PlayPerfectReactionPhase();
+            PlayJumpReactionPhase();
+            return;
+        }
+
+        EnterFatigue(false);
+    }
+
+    private void UpdateCloseRangeImpactReaction()
+    {
+        stateTimer -= Time.deltaTime;
+        if (stateTimer > 0f)
+            return;
+
+        if (perfectReactionPhase < 1)
+        {
+            perfectReactionPhase++;
+            PlayJumpReactionPhase();
             return;
         }
 
@@ -745,10 +769,26 @@ public class BullAI : MonoBehaviour
             timingScript.HideRingKeepFeedback();
 
         perfectReactionPhase = 0;
-        PlayPerfectReactionPhase();
+        PlayJumpReactionPhase();
     }
 
-    private void PlayPerfectReactionPhase()
+    private void EnterCloseRangeImpactReaction()
+    {
+        StopBullMotionImmediate();
+        ClearAutoAttackState();
+        currentState = BullState.CloseRangeImpactReaction;
+        ResetChargeQteState();
+        pendingCircleReset = false;
+        hasRoamTarget = false;
+        HideChargeTelegraph();
+        if (timingScript != null)
+            timingScript.HideRingKeepFeedback();
+
+        perfectReactionPhase = 0;
+        PlayJumpReactionPhase();
+    }
+
+    private void PlayJumpReactionPhase()
     {
         float phaseFrames = perfectReactionPhase == 0 ? PerfectReactionStartFrames : PerfectReactionAirFrames;
         string clipName = perfectReactionPhase == 0 ? AnimationPerfectReactionStart : AnimationPerfectReactionAir;
@@ -845,6 +885,7 @@ public class BullAI : MonoBehaviour
         SetChargeMissPlayerLock(false);
         timingActive = false;
         canDamagePlayerThisCharge = false;
+        closeRangeImpactConsumedThisAttack = false;
         chargeHasEligibleTarget = false;
         chargeQteResolved = false;
         chargeResultAllowsDamage = false;
@@ -1197,7 +1238,7 @@ public class BullAI : MonoBehaviour
 
     private void UpdateAnimation()
     {
-        if (currentState == BullState.PerfectReaction)
+        if (currentState == BullState.PerfectReaction || currentState == BullState.CloseRangeImpactReaction)
             return;
 
         bool hasMoveIntent =
@@ -1295,6 +1336,7 @@ public class BullAI : MonoBehaviour
     public void ResetCombatState()
     {
         currentState = BullState.Roaming; stateTimer = 0f; ResetChargeQteState(); pendingCircleReset = false; engageTimer = engageDelay; lastHitTime = -999f; chargeStartedAt = -999f; chargeStartPosition = GetCurrentBullPosition(); chargeDirection = transform.forward.sqrMagnitude > 0.0001f ? transform.forward.normalized : Vector3.forward; animationView?.Reset(); roamCenter = GetArenaCenter(); hasRoamTarget = false; attackRecoveryTimer = 1.25f; plannedChargeDistance = 0f; displayedTelegraphTravelDistance = 0f; chargeLaneHalfWidth = 0f; dashedThisCharge = false; currentHorizontalMotion = 0f; phaseTwoChargeMotionActive = false; locomotionBlendTimer = 0f; ClearAutoAttackState(); ScheduleNextAutoAttack(); HideChargeTelegraph();
+        closeRangeImpactConsumedThisAttack = false;
         tutorialChargeDamageEnabled = false;
         tutorialChargeSequenceActive = false;
         tutorialChargeSequenceComplete = false;
@@ -1384,7 +1426,38 @@ public class BullAI : MonoBehaviour
         return true;
     }
 
-    private void ApplyChargeDamage(bool forceDamage = false)
+    private bool TryApplyCloseRangeChargeFallback()
+    {
+        if (closeRangeImpactConsumedThisAttack ||
+            (currentState != BullState.Telegraphing && currentState != BullState.Charging) ||
+            playerStats == null ||
+            playerStats.IsDead ||
+            playerStats.IsInvulnerable ||
+            !TryGetPlayerCollider(out Collider activePlayerCollider) ||
+            activePlayerCollider == null)
+        {
+            return false;
+        }
+
+        if (!IsPlayerOverlappingCloseChargeZone(activePlayerCollider) || !IsPlayerInCloseRangeChargeFrontArc(activePlayerCollider))
+            return false;
+
+        closeRangeImpactConsumedThisAttack = true;
+        if (currentState == BullState.Telegraphing)
+        {
+            chargeStartedAt = Time.time;
+            chargeStartPosition = GetCurrentBullPosition();
+        }
+
+        Vector3 fallbackDirection = GetHorizontalDirectionToPlayer();
+        if (fallbackDirection.sqrMagnitude > 0.0001f)
+            chargeDirection = fallbackDirection;
+
+        ApplyChargeDamage(true, true);
+        return true;
+    }
+
+    private void ApplyChargeDamage(bool forceDamage = false, bool useCloseRangeReaction = false)
     {
         if (!forceDamage && !CanAttemptChargeDamage())
             return;
@@ -1401,13 +1474,19 @@ public class BullAI : MonoBehaviour
             tutorialChargeHitPlayer = true;
             if (!tutorialChargeDamageEnabled)
             {
-                EnterImpact(true);
+                if (useCloseRangeReaction)
+                    EnterCloseRangeImpactReaction();
+                else
+                    EnterImpact(true);
                 return;
             }
         }
 
         playerStats.TakeBullImpact(collisionDamage, GetCurrentBullPosition());
-        EnterImpact(true);
+        if (useCloseRangeReaction)
+            EnterCloseRangeImpactReaction();
+        else
+            EnterImpact(true);
     }
 
     private void StopBullShortOfPlayer(Collider activePlayerCollider, float extraBuffer)
@@ -1934,6 +2013,31 @@ public class BullAI : MonoBehaviour
         if (!Physics.ComputePenetration(bullCollider, bullPosition, bullRotation, activePlayerCollider, playerPosition, playerRotation, out _, out _)) return false;
         Vector3 overlapCenterLocal = ToBullLocalPoint(activePlayerCollider.bounds.center, bullPosition, bullRotation);
         return Mathf.Abs(overlapCenterLocal.x) <= halfWidth && overlapCenterLocal.z >= -rearForgiveness;
+    }
+
+    private bool IsPlayerInCloseRangeChargeFrontArc(Collider activePlayerCollider)
+    {
+        if (activePlayerCollider == null)
+            return false;
+
+        Vector3 bullPosition = GetCurrentBullPosition();
+        Vector3 toPlayer = GetColliderWorldPosition(activePlayerCollider) - bullPosition;
+        toPlayer.y = 0f;
+        if (toPlayer.sqrMagnitude <= 0.0001f)
+            return true;
+
+        Vector3 forward = currentState == BullState.Charging && chargeDirection.sqrMagnitude > 0.0001f
+            ? chargeDirection
+            : GetCurrentBullRotation() * Vector3.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude <= 0.0001f)
+            forward = transform.forward;
+
+        forward.y = 0f;
+        if (forward.sqrMagnitude <= 0.0001f)
+            return true;
+
+        return Vector3.Dot(forward.normalized, toPlayer.normalized) >= 0.2f;
     }
 
     private Vector3 ToBullLocalPoint(Vector3 worldPoint, Vector3 bullPosition, Quaternion bullRotation)
