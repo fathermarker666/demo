@@ -86,8 +86,6 @@ public class BullAI : MonoBehaviour
         chargeStartedAt = Time.time;
 
         Vector3 targetPoint = player != null ? player.position : transform.position + transform.forward;
-        if (playerStats != null && playerStats.TryGetFirstPersonCameraPoint(out Vector3 cameraPoint))
-            targetPoint = cameraPoint;
 
         chargeDirection = targetPoint - GetCurrentBullPosition();
         chargeDirection.y = 0f;
@@ -348,9 +346,6 @@ public class BullAI : MonoBehaviour
         MoveCharge(GetChargeSpeed());
         if (!dashedThisCharge && playerStats != null && playerStats.LastDashTime >= chargeStartedAt)
             dashedThisCharge = true;
-
-        if (TryApplyCloseRangeChargeFallback())
-            return;
 
         bool usesExternallyDrivenTutorialTiming = tutorialControlActive && tutorialChargeSequenceActive && tutorialChargeUsesTiming;
         if (!usesExternallyDrivenTutorialTiming &&
@@ -1429,7 +1424,7 @@ public class BullAI : MonoBehaviour
     private bool TryApplyCloseRangeChargeFallback()
     {
         if (closeRangeImpactConsumedThisAttack ||
-            (currentState != BullState.Telegraphing && currentState != BullState.Charging) ||
+            currentState != BullState.Telegraphing ||
             playerStats == null ||
             playerStats.IsDead ||
             playerStats.IsInvulnerable ||
@@ -2128,6 +2123,7 @@ public class BullAI : MonoBehaviour
     private void UpdatePhaseTwoChargeMotion()
     {
         MoveCharge(GetChargeSpeed(), Time.unscaledDeltaTime);
+        ClampPhaseTwoChargePositionWithinArena();
 
         if (!dashedThisCharge && playerStats != null && playerStats.LastDashTime >= chargeStartedAt)
             dashedThisCharge = true;
@@ -2140,6 +2136,17 @@ public class BullAI : MonoBehaviour
         currentState = BullState.Idle;
         stateTimer = 0f;
         HideChargeTelegraph();
+    }
+
+    private void ClampPhaseTwoChargePositionWithinArena()
+    {
+        Vector3 currentPosition = GetCurrentBullPosition();
+        Vector3 clampedPosition = ClampWithinArena(currentPosition, arenaBoundaryPadding);
+        if (HorizontalDistance(currentPosition, clampedPosition) <= 0.001f)
+            return;
+
+        clampedPosition.y = currentPosition.y;
+        QueueMovePosition(clampedPosition);
     }
 
     private void CommitQueuedPoseImmediate()

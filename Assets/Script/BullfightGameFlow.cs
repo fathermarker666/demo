@@ -1708,7 +1708,7 @@ public partial class BullfightGameFlow : MonoBehaviour
             float pauseElapsed = phaseTwoStateElapsed - chargeDuration;
             float reorientWindow = Mathf.Min(Mathf.Max(0f, reorientDelay), pauseDuration);
             float reorientStart = Mathf.Max(0f, pauseDuration - reorientWindow);
-            Vector3 current = bullAI.transform.position;
+            Vector3 current = ClampPhaseTwoBullPositionToArena(bullAI.transform.position);
 
             if (pauseElapsed >= reorientStart && reorientWindow > 0f)
             {
@@ -2052,9 +2052,8 @@ public partial class BullfightGameFlow : MonoBehaviour
         if (!enableStaffHighScoreReset)
             return;
 
-        bool controlPressed = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
         bool shiftPressed = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-        if (!controlPressed || !shiftPressed || !Input.GetKeyDown(staffResetDailyHighScoreKey))
+        if (!shiftPressed || !Input.GetKeyDown(staffResetDailyHighScoreKey))
             return;
 
         EnsureArcadeScoring();
@@ -3060,6 +3059,21 @@ public partial class BullfightGameFlow : MonoBehaviour
     private float GetPhaseTwoMinimumPlayerDistance()
     {
         return Mathf.Max(1.35f, phaseTwoMinimumPlayerDistance);
+    }
+
+    private Vector3 ClampPhaseTwoBullPositionToArena(Vector3 position, float padding = 0.2f)
+    {
+        if (spawnManager == null)
+            return position;
+
+        Vector3 center = spawnManager.ArenaCenter;
+        float radius = Mathf.Max(0.5f, spawnManager.ArenaRadius - Mathf.Max(0f, padding));
+        Vector3 offset = new Vector3(position.x - center.x, 0f, position.z - center.z);
+        if (offset.sqrMagnitude <= radius * radius)
+            return position;
+
+        offset = offset.normalized * radius;
+        return new Vector3(center.x + offset.x, position.y, center.z + offset.z);
     }
 
     private Vector3 ClampPhaseTwoTargetToPlayerView(Vector3 target, float preferredDistance)
