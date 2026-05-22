@@ -7,8 +7,11 @@
 /*
   Handheld ESP32 sender
   - MPU6050 on SDA=21, SCL=22
-  - Ultrasonic TRIG=5, ECHO=18
-  - Sends SensorPacket over ESP-NOW every 50 ms
+  - Ultrasonic TRIG=16, ECHO=18
+  - Dual analog sticks on ADC1 pins
+  - Buttons: A/B/X/Y/LB/RB/LT/RT
+  - Sends controller packets over ESP-NOW every 20 ms
+  - Sends sensor packets over ESP-NOW every 50 ms
   - Accepts CAL from USB serial and from the paired receiver ESP32
 
   IMPORTANT:
@@ -22,7 +25,8 @@ constexpr uint8_t kSdaPin = 21;
 constexpr uint8_t kSclPin = 22;
 constexpr uint32_t kSerialBaud = 115200;
 constexpr uint32_t kI2cClock = 400000;
-constexpr uint32_t kSampleIntervalMs = 50;
+constexpr uint32_t kSensorSampleIntervalMs = 50;
+constexpr uint32_t kControllerSampleIntervalMs = 20;
 constexpr uint32_t kCalibrationDurationMs = 350;
 constexpr float kAccelScaleLsbPerG = 16384.0f;
 constexpr float kMinimumNoiseBandG = 0.015f;
@@ -30,10 +34,34 @@ constexpr float kForceScale = 40.0f;
 constexpr float kForceCap = 50.0f;
 constexpr float kThrustThreshold = 35.0f;
 constexpr float kReleaseThreshold = 18.0f;
-constexpr uint8_t kUltrasonicTrigPin = 5;
+constexpr uint8_t kUltrasonicTrigPin = 16;
 constexpr uint8_t kUltrasonicEchoPin = 18;
 constexpr uint32_t kUltrasonicPulseTimeoutUs = 5000;
 constexpr float kUltrasonicMaxDistanceCm = 80.0f;
+
+constexpr uint8_t kLeftStickXPin = 32;
+constexpr uint8_t kLeftStickYPin = 33;
+constexpr uint8_t kRightStickXPin = 34;
+constexpr uint8_t kRightStickYPin = 35;
+constexpr uint16_t kAnalogMax = 4095;
+constexpr uint16_t kAnalogMidpoint = kAnalogMax / 2;
+constexpr uint8_t kStickCalibrationSamples = 40;
+constexpr uint8_t kStickCalibrationDelayMs = 5;
+constexpr float kStickDeadzone = 0.12f;
+constexpr bool kInvertLeftStickX = false;
+constexpr bool kInvertLeftStickY = true;
+constexpr bool kInvertRightStickX = false;
+constexpr bool kInvertRightStickY = true;
+
+constexpr uint8_t kButtonAPin = 4;
+constexpr uint8_t kButtonBPin = 13;
+constexpr uint8_t kButtonXPin = 14;
+constexpr uint8_t kButtonYPin = 19;
+constexpr uint8_t kButtonLbPin = 23;
+constexpr uint8_t kButtonRbPin = 25;
+constexpr uint8_t kButtonLtPin = 26;
+constexpr uint8_t kButtonRtPin = 27;
+
 constexpr uint8_t kReceiverMac[6] = {
     0x30, 0x76, 0xF5, 0xF8, 0xFF, 0xF0};
 }
@@ -41,6 +69,7 @@ constexpr uint8_t kReceiverMac[6] = {
 namespace PacketType {
 constexpr uint8_t kSensor = 1;
 constexpr uint8_t kCommand = 2;
+constexpr uint8_t kController = 3;
 }
 
 namespace CommandId {
@@ -51,6 +80,17 @@ namespace PacketFlag {
 constexpr uint8_t kThrustLatched = 1 << 0;
 constexpr uint8_t kDistanceValid = 1 << 1;
 constexpr uint8_t kReadyPulse = 1 << 2;
+}
+
+namespace ControllerButtonBit {
+constexpr uint16_t kA = 1 << 0;
+constexpr uint16_t kB = 1 << 1;
+constexpr uint16_t kX = 1 << 2;
+constexpr uint16_t kY = 1 << 3;
+constexpr uint16_t kLb = 1 << 4;
+constexpr uint16_t kRb = 1 << 5;
+constexpr uint16_t kLt = 1 << 6;
+constexpr uint16_t kRt = 1 << 7;
 }
 
 namespace MpuReg {
@@ -76,14 +116,54 @@ struct __attribute__((packed)) CommandPacket {
   uint8_t command;
 };
 
+struct __attribute__((packed)) ControllerPacket {
+  uint8_t packetType;
+  int16_t leftX;
+  int16_t leftY;
+  int16_t rightX;
+  int16_t rightY;
+  uint16_t buttons;
+};
+
 static_assert(sizeof(SensorPacket) == 10, "Unexpected SensorPacket size");
 static_assert(sizeof(CommandPacket) == 2, "Unexpected CommandPacket size");
+static_assert(sizeof(ControllerPacket) == 11, "Unexpected ControllerPacket size");
 
 struct CalibrationStats {
   float sumY = 0.0f;
   float minY = 0.0f;
   float maxY = 0.0f;
   uint32_t sampleCount = 0;
+};
+
+struct ButtonBinding {
+  uint8_t pin;
+  uint16_t mask;
+};
+
+const ButtonBinding kButtonBindings[] = {
+    {Config::kButtonAPin, ControllerButtonBit::kA},
+    {Config::kButtonBPin, ControllerButtonBit::kB},
+    {Config::kButtonXPin, ControllerButtonBit::kX},
+    {Config::kButtonYPin, ControllerButtonBit::kY},
+    {Config::kButtonLbPin, ControllerButtonBit::kLb},
+    {Config::kButtonRbPin, ControllerButtonBit::kRb},
+    {Config::kButtonLtPin, ControllerButtonBit::kLt},
+    {Config::kButtonRtPin, ControllerButtonBit::kRt},
+};
+
+const uint8_t kStickPins[] = {
+    Config::kLeftStickXPin,
+    Config::kLeftStickYPin,
+    Config::kRightStickXPin,
+    Config::kRightStickYPin,
+};
+
+const bool kStickInvert[] = {
+    Config::kInvertLeftStickX,
+    Config::kInvertLeftStickY,
+    Config::kInvertRightStickX,
+    Config::kInvertRightStickY,
 };
 
 enum class RunMode {
@@ -94,7 +174,8 @@ enum class RunMode {
 
 RunMode gMode = RunMode::Idle;
 CalibrationStats gCalibration;
-unsigned long gLastSampleMs = 0;
+unsigned long gLastSensorSampleMs = 0;
+unsigned long gLastControllerSampleMs = 0;
 unsigned long gCalibrationStartMs = 0;
 float gAccelYOffset = 0.0f;
 float gNoiseBandY = Config::kMinimumNoiseBandG;
@@ -102,6 +183,12 @@ float gLastForce = 0.0f;
 bool gSensorReady = false;
 bool gThrustLatched = false;
 bool gPendingReadyPulse = false;
+int gStickCenterRaw[4] = {
+    Config::kAnalogMidpoint,
+    Config::kAnalogMidpoint,
+    Config::kAnalogMidpoint,
+    Config::kAnalogMidpoint,
+};
 char gSerialCommandBuffer[8];
 uint8_t gSerialCommandLength = 0;
 
@@ -192,6 +279,78 @@ bool readUltrasonicDistanceCm(float& distanceCm) {
          distanceCm <= Config::kUltrasonicMaxDistanceCm;
 }
 
+void initControllerInputs() {
+  analogReadResolution(12);
+
+  for (size_t i = 0; i < sizeof(kStickPins) / sizeof(kStickPins[0]); ++i) {
+    analogSetPinAttenuation(kStickPins[i], ADC_11db);
+  }
+
+  for (size_t i = 0; i < sizeof(kButtonBindings) / sizeof(kButtonBindings[0]); ++i) {
+    pinMode(kButtonBindings[i].pin, INPUT_PULLUP);
+  }
+}
+
+void calibrateStickCenters() {
+  long sums[4] = {0, 0, 0, 0};
+
+  delay(20);
+  for (uint8_t sample = 0; sample < Config::kStickCalibrationSamples; ++sample) {
+    for (size_t axisIndex = 0; axisIndex < sizeof(kStickPins) / sizeof(kStickPins[0]); ++axisIndex) {
+      sums[axisIndex] += analogRead(kStickPins[axisIndex]);
+    }
+    delay(Config::kStickCalibrationDelayMs);
+  }
+
+  for (size_t axisIndex = 0; axisIndex < sizeof(kStickPins) / sizeof(kStickPins[0]); ++axisIndex) {
+    gStickCenterRaw[axisIndex] = static_cast<int>(
+        sums[axisIndex] / (Config::kStickCalibrationSamples > 0 ? Config::kStickCalibrationSamples : 1));
+  }
+}
+
+float applyStickDeadzone(float normalizedValue) {
+  float magnitude = fabsf(normalizedValue);
+  if (magnitude <= Config::kStickDeadzone) {
+    return 0.0f;
+  }
+
+  const float scaledMagnitude =
+      (magnitude - Config::kStickDeadzone) / (1.0f - Config::kStickDeadzone);
+  const float signedValue = normalizedValue < 0.0f ? -scaledMagnitude : scaledMagnitude;
+  return constrain(signedValue, -1.0f, 1.0f);
+}
+
+float normalizeStickAxis(int rawValue, int centerValue, bool invert) {
+  const int clampedCenter = constrain(centerValue, 1, Config::kAnalogMax - 1);
+  const float delta = static_cast<float>(rawValue - clampedCenter);
+  const float range = delta >= 0.0f
+      ? static_cast<float>(Config::kAnalogMax - clampedCenter)
+      : static_cast<float>(clampedCenter);
+
+  float normalized = range > 1.0f ? delta / range : 0.0f;
+  normalized = constrain(normalized, -1.0f, 1.0f);
+  normalized = applyStickDeadzone(normalized);
+
+  return invert ? -normalized : normalized;
+}
+
+int16_t encodeStickAxis(float normalizedValue) {
+  const float clampedValue = constrain(normalizedValue, -1.0f, 1.0f);
+  return static_cast<int16_t>(lrintf(clampedValue * 1000.0f));
+}
+
+uint16_t readControllerButtonsMask() {
+  uint16_t buttonsMask = 0;
+
+  for (size_t i = 0; i < sizeof(kButtonBindings) / sizeof(kButtonBindings[0]); ++i) {
+    if (digitalRead(kButtonBindings[i].pin) == LOW) {
+      buttonsMask |= kButtonBindings[i].mask;
+    }
+  }
+
+  return buttonsMask;
+}
+
 void resetCalibrationStats() {
   gCalibration = CalibrationStats{};
 }
@@ -278,12 +437,42 @@ void sendSensorPacket(float forceValue, bool forceValid, float distanceCm, bool 
   }
 }
 
-void updateSensorTask() {
+void sendControllerPacket() {
+  ControllerPacket packet{};
+  packet.packetType = PacketType::kController;
+  packet.leftX = encodeStickAxis(
+      normalizeStickAxis(analogRead(Config::kLeftStickXPin), gStickCenterRaw[0], kStickInvert[0]));
+  packet.leftY = encodeStickAxis(
+      normalizeStickAxis(analogRead(Config::kLeftStickYPin), gStickCenterRaw[1], kStickInvert[1]));
+  packet.rightX = encodeStickAxis(
+      normalizeStickAxis(analogRead(Config::kRightStickXPin), gStickCenterRaw[2], kStickInvert[2]));
+  packet.rightY = encodeStickAxis(
+      normalizeStickAxis(analogRead(Config::kRightStickYPin), gStickCenterRaw[3], kStickInvert[3]));
+  packet.buttons = readControllerButtonsMask();
+
+  const esp_err_t result = esp_now_send(
+      Config::kReceiverMac, reinterpret_cast<const uint8_t*>(&packet), sizeof(packet));
+  if (result != ESP_OK) {
+    logSendFailure(result);
+  }
+}
+
+void updateControllerTask() {
   const unsigned long now = millis();
-  if (now - gLastSampleMs < Config::kSampleIntervalMs) {
+  if (now - gLastControllerSampleMs < Config::kControllerSampleIntervalMs) {
     return;
   }
-  gLastSampleMs = now;
+
+  gLastControllerSampleMs = now;
+  sendControllerPacket();
+}
+
+void updateSensorTask() {
+  const unsigned long now = millis();
+  if (now - gLastSensorSampleMs < Config::kSensorSampleIntervalMs) {
+    return;
+  }
+  gLastSensorSampleMs = now;
 
   const bool readyPulseForThisPacket = gPendingReadyPulse;
 
@@ -294,7 +483,7 @@ void updateSensorTask() {
   bool forceValid = false;
 
   float accelYG = 0.0f;
-  const bool accelValid = readAccelY(accelYG);
+  const bool accelValid = gSensorReady && readAccelY(accelYG);
 
   if (gMode == RunMode::Calibrating) {
     if (accelValid) {
@@ -430,12 +619,16 @@ void setup() {
   pinMode(Config::kUltrasonicEchoPin, INPUT);
   digitalWrite(Config::kUltrasonicTrigPin, LOW);
 
+  initControllerInputs();
+  calibrateStickCenters();
+
   if (!initEspNow()) {
     return;
   }
 
   gSensorReady = initSensor();
-  gLastSampleMs = millis();
+  gLastSensorSampleMs = millis();
+  gLastControllerSampleMs = millis();
 
   if (!gSensorReady) {
     Serial.println("SENSOR_INIT_FAIL");
@@ -447,10 +640,6 @@ void setup() {
 
 void loop() {
   handleSerialInput();
-
-  if (!gSensorReady) {
-    return;
-  }
-
+  updateControllerTask();
   updateSensorTask();
 }

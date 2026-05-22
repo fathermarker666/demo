@@ -5,7 +5,7 @@
 
 /*
   Receiver / Unity bridge ESP32
-  - Receives SensorPacket over ESP-NOW
+  - Receives SensorPacket and ControllerPacket over ESP-NOW
   - Prints Unity-compatible serial lines at 115200 baud
   - Forwards CAL from USB serial back to the handheld controller
 */
@@ -17,6 +17,7 @@ constexpr uint32_t kSerialBaud = 115200;
 namespace PacketType {
 constexpr uint8_t kSensor = 1;
 constexpr uint8_t kCommand = 2;
+constexpr uint8_t kController = 3;
 }
 
 namespace CommandId {
@@ -41,8 +42,18 @@ struct __attribute__((packed)) CommandPacket {
   uint8_t command;
 };
 
+struct __attribute__((packed)) ControllerPacket {
+  uint8_t packetType;
+  int16_t leftX;
+  int16_t leftY;
+  int16_t rightX;
+  int16_t rightY;
+  uint16_t buttons;
+};
+
 static_assert(sizeof(SensorPacket) == 10, "Unexpected SensorPacket size");
 static_assert(sizeof(CommandPacket) == 2, "Unexpected CommandPacket size");
+static_assert(sizeof(ControllerPacket) == 11, "Unexpected ControllerPacket size");
 
 uint8_t gHandheldMac[6] = {};
 bool gHasHandheldMac = false;
@@ -106,6 +117,19 @@ void emitThrustDetected() {
   Serial.println("THRUST_DETECTED");
 }
 
+void emitController(const ControllerPacket& packet) {
+  Serial.print("CTRL:");
+  Serial.print(packet.leftX);
+  Serial.print(',');
+  Serial.print(packet.leftY);
+  Serial.print(',');
+  Serial.print(packet.rightX);
+  Serial.print(',');
+  Serial.print(packet.rightY);
+  Serial.print(',');
+  Serial.println(packet.buttons);
+}
+
 void processSensorPacket(const uint8_t* mac, const SensorPacket& packet) {
   rememberHandheldMac(mac);
 
@@ -141,18 +165,33 @@ void processSensorPacket(const uint8_t* mac, const SensorPacket& packet) {
   gLastThrustLatched = thrustLatched;
 }
 
+void processControllerPacket(const uint8_t* mac, const ControllerPacket& packet) {
+  rememberHandheldMac(mac);
+  emitController(packet);
+}
+
 void processIncomingPacket(const uint8_t* mac, const uint8_t* incomingData, int len) {
-  if (incomingData == nullptr || len != static_cast<int>(sizeof(SensorPacket))) {
+  if (incomingData == nullptr || len <= 0) {
     return;
   }
 
-  SensorPacket packet{};
-  memcpy(&packet, incomingData, sizeof(packet));
-  if (packet.packetType != PacketType::kSensor) {
-    return;
-  }
+  switch (incomingData[0]) {
+    case PacketType::kSensor:
+      if (len == static_cast<int>(sizeof(SensorPacket))) {
+        SensorPacket packet{};
+        memcpy(&packet, incomingData, sizeof(packet));
+        processSensorPacket(mac, packet);
+      }
+      break;
 
-  processSensorPacket(mac, packet);
+    case PacketType::kController:
+      if (len == static_cast<int>(sizeof(ControllerPacket))) {
+        ControllerPacket packet{};
+        memcpy(&packet, incomingData, sizeof(packet));
+        processControllerPacket(mac, packet);
+      }
+      break;
+  }
 }
 
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3

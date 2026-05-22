@@ -3,6 +3,8 @@ using System.Collections;
 using System.Globalization;
 using System.IO.Ports;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 public class ArduinoTest : MonoBehaviour
 {
@@ -23,6 +25,7 @@ public class ArduinoTest : MonoBehaviour
     [SerializeField] float phaseOneHoldEnterDeltaCm = 10f;
     [SerializeField] float phaseOneHoldExitDeltaCm = -10f;
     [SerializeField] float phaseOneHoldSignalTimeout = 0.5f;
+    [SerializeField] string virtualGamepadName = "ESP32 Virtual Gamepad";
 
     SerialPort sp;
     Coroutine reopenCoroutine;
@@ -41,6 +44,16 @@ public class ArduinoTest : MonoBehaviour
     float nextPlayerResolveAt = -1f;
     string lastOpenFailureWarningMessage = string.Empty;
     SensorConnectionState connectionState = SensorConnectionState.Disconnected;
+    Gamepad virtualGamepad;
+
+    const uint ButtonMaskSouth = 1u << 0;
+    const uint ButtonMaskEast = 1u << 1;
+    const uint ButtonMaskWest = 1u << 2;
+    const uint ButtonMaskNorth = 1u << 3;
+    const uint ButtonMaskLeftShoulder = 1u << 4;
+    const uint ButtonMaskRightShoulder = 1u << 5;
+    const uint ButtonMaskLeftTrigger = 1u << 6;
+    const uint ButtonMaskRightTrigger = 1u << 7;
 
     public event Action<SensorConnectionState> OnConnectionStateChanged;
 
@@ -70,6 +83,7 @@ public class ArduinoTest : MonoBehaviour
 
     void Start()
     {
+        EnsureVirtualGamepad();
         reopenCoroutine = StartCoroutine(OpenPortAfterDelay(initialOpenDelay));
     }
 
@@ -178,11 +192,13 @@ public class ArduinoTest : MonoBehaviour
     {
         playerController?.SetPhaseTwoCalibrationSensorHeld(false);
         playerController?.ResetSensorDrivenInputs();
+        ResetVirtualGamepadState();
         ClosePort();
     }
 
     void OnDestroy()
     {
+        RemoveVirtualGamepad();
         ClosePort();
     }
 
@@ -191,6 +207,7 @@ public class ArduinoTest : MonoBehaviour
         isQuitting = true;
         playerController?.SetPhaseTwoCalibrationSensorHeld(false);
         playerController?.ResetSensorDrivenInputs();
+        RemoveVirtualGamepad();
         ClosePort();
     }
 
@@ -214,6 +231,9 @@ public class ArduinoTest : MonoBehaviour
         lastSensorMessageAt = Time.unscaledTime;
         lastSensorMessage = data.Trim();
         SetConnectionState(SensorConnectionState.Active);
+
+        if (TryHandleControllerMessage(data))
+            return;
 
         if (TryHandleUltrasonicDistanceMessage(data))
             return;
@@ -267,6 +287,47 @@ public class ArduinoTest : MonoBehaviour
                 playerController?.SetPhaseTwoSensorCalibrationReady(false);
                 break;
         }
+    }
+
+    bool TryHandleControllerMessage(string rawData)
+    {
+        string data = rawData.Trim();
+        if (string.IsNullOrEmpty(data))
+            return false;
+
+        const string prefix = "CTRL:";
+        if (!data.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        string[] parts = data.Substring(prefix.Length).Split(',');
+        if (parts.Length != 5)
+            return true;
+
+        if (!int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int leftX) ||
+            !int.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int leftY) ||
+            !int.TryParse(parts[2].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int rightX) ||
+            !int.TryParse(parts[3].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int rightY) ||
+            !uint.TryParse(parts[4].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out uint buttonsMask))
+            return true;
+
+        EnsureVirtualGamepad();
+        if (virtualGamepad == null)
+            return true;
+
+        GamepadState state = default;
+        state.leftStick = new Vector2(NormalizeControllerAxis(leftX), NormalizeControllerAxis(leftY));
+        state.rightStick = new Vector2(NormalizeControllerAxis(rightX), NormalizeControllerAxis(rightY));
+        state.leftTrigger = (buttonsMask & ButtonMaskLeftTrigger) != 0 ? 1f : 0f;
+        state.rightTrigger = (buttonsMask & ButtonMaskRightTrigger) != 0 ? 1f : 0f;
+        state = state.WithButton(GamepadButton.South, (buttonsMask & ButtonMaskSouth) != 0);
+        state = state.WithButton(GamepadButton.East, (buttonsMask & ButtonMaskEast) != 0);
+        state = state.WithButton(GamepadButton.West, (buttonsMask & ButtonMaskWest) != 0);
+        state = state.WithButton(GamepadButton.North, (buttonsMask & ButtonMaskNorth) != 0);
+        state = state.WithButton(GamepadButton.LeftShoulder, (buttonsMask & ButtonMaskLeftShoulder) != 0);
+        state = state.WithButton(GamepadButton.RightShoulder, (buttonsMask & ButtonMaskRightShoulder) != 0);
+
+        InputState.Change(virtualGamepad, state);
+        return true;
     }
 
     bool TryHandleUltrasonicDistanceMessage(string rawData)
@@ -433,6 +494,11 @@ public class ArduinoTest : MonoBehaviour
         holdAnchorDistanceCm = float.NaN;
     }
 
+    float NormalizeControllerAxis(int value)
+    {
+        return Mathf.Clamp(value / 1000f, -1f, 1f);
+    }
+
     void ClearUltrasonicHoldState(bool resetRestAnchor = true)
     {
         isUltrasonicHoldingCloth = false;
@@ -489,8 +555,36 @@ public class ArduinoTest : MonoBehaviour
         else
             ResetUltrasonicHoldAnchors();
 
+        ResetVirtualGamepadState();
         playerController?.SetPhaseTwoCalibrationSensorHeld(false);
         playerController?.ResetSensorDrivenInputs(clearUltrasonicHold: false);
+    }
+
+    void EnsureVirtualGamepad()
+    {
+        if (virtualGamepad != null)
+            return;
+
+        virtualGamepad = InputSystem.AddDevice<Gamepad>(virtualGamepadName);
+        ResetVirtualGamepadState();
+    }
+
+    void ResetVirtualGamepadState()
+    {
+        if (virtualGamepad == null)
+            return;
+
+        GamepadState clearedState = default;
+        InputState.Change(virtualGamepad, clearedState);
+    }
+
+    void RemoveVirtualGamepad()
+    {
+        if (virtualGamepad == null)
+            return;
+
+        InputSystem.RemoveDevice(virtualGamepad);
+        virtualGamepad = null;
     }
 
     void ClosePort()
@@ -528,6 +622,7 @@ public class ArduinoTest : MonoBehaviour
             lastUltrasonicDistanceCm = -1f;
             lastUltrasonicMessageAt = -999f;
             ResetUltrasonicHoldAnchors();
+            ResetVirtualGamepadState();
         }
     }
 }
