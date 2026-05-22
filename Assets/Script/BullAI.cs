@@ -20,6 +20,8 @@ public class BullAI : MonoBehaviour
     private const float ChargeHitboxContactPadding = 0.01f;
     private const float DirectAttackTriggerDistanceMultiplier = 0.5f;
     private const float ConsecutiveAttackRecoveryBonusSeconds = 1f;
+    private const float FarMissCommitDistanceThreshold = 2.5f;
+    private const float FarMissCommitSpeedMultiplier = 1.3f;
     private const string AnimationAttackForward = "Arm_Bull|Attack_F";
     private const string AnimationAttackForwardInPlace = "Arm_Bull|Attack_F_IP";
     private const string AnimationDeathLeft = "Arm_Bull|Death_L";
@@ -345,7 +347,7 @@ public class BullAI : MonoBehaviour
 
     private void UpdateCharge()
     {
-        MoveCharge(GetChargeSpeed());
+        MoveCharge(GetActiveChargeMoveSpeed());
         if (!dashedThisCharge && playerStats != null && playerStats.LastDashTime >= chargeStartedAt)
             dashedThisCharge = true;
 
@@ -496,6 +498,7 @@ public class BullAI : MonoBehaviour
     private float GetEngageApproachSpeed() => engageApproachSpeed * bullStats.GetApproachSpeedMultiplier() * (1f + (1f - bullStats.HealthNormalized) * 0.22f);
     private float GetTelegraphApproachSpeed() => telegraphApproachSpeed * bullStats.GetApproachSpeedMultiplier() * (1f + (1f - bullStats.HealthNormalized) * 0.28f);
     private float GetChargeSpeed() => chargeSpeed * bullStats.GetChargeSpeedMultiplier() * (1f + (1f - bullStats.HealthNormalized) * 0.2f);
+    private float GetActiveChargeMoveSpeed() => IsFarMissCommitChargeActive() ? GetChargeSpeed() * FarMissCommitSpeedMultiplier : GetChargeSpeed();
     private float GetDirectAttackTriggerDistance() => Mathf.Max(0.1f, dangerTriggerDistance * DirectAttackTriggerDistanceMultiplier);
     private float GetConsecutiveAttackRecoveryDuration() => Mathf.Max(0f, attackRecoveryDuration + ConsecutiveAttackRecoveryBonusSeconds);
     private float GetChargeTimingDuration(float travelDistance)
@@ -883,7 +886,7 @@ public class BullAI : MonoBehaviour
             GetChargeThreatDistance(plannedChargeDistance) * 0.4f);
         float chargeTravelDistance = HorizontalDistance(chargeStartPosition, GetCurrentBullPosition());
         plannedChargeDistance = Mathf.Max(plannedChargeDistance, chargeTravelDistance + remainingCommitDistance);
-        stateTimer = Mathf.Max(stateTimer, remainingCommitDistance / Mathf.Max(0.01f, GetChargeSpeed()));
+        stateTimer = Mathf.Max(stateTimer, remainingCommitDistance / Mathf.Max(0.01f, GetActiveChargeMoveSpeed()));
 
         if (ShouldLockPlayerDuringMissCommit())
             SetChargeMissPlayerLock(true);
@@ -1665,6 +1668,14 @@ public class BullAI : MonoBehaviour
             return false;
 
         return Time.time - lastHitTime >= hitCooldown;
+    }
+
+    private bool IsFarMissCommitChargeActive()
+    {
+        return currentState == BullState.Charging &&
+               chargeResultAllowsDamage &&
+               chargeMissPlayerLockActive &&
+               plannedChargeDistance >= FarMissCommitDistanceThreshold;
     }
 
     private void BeginChargeTiming()
