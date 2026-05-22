@@ -12,6 +12,12 @@ using UnityEditor;
 [DisallowMultipleComponent]
 public class ManualStartMenuController : MonoBehaviour
 {
+    public enum FrontendReloadLandingTarget
+    {
+        Home,
+        StartSelectionMenu
+    }
+
     private static readonly string[] DefaultGameplayUiRootNames =
     {
         "HUD_Canvas",
@@ -19,6 +25,7 @@ public class ManualStartMenuController : MonoBehaviour
         "P_LPSP_UI_Canvas",
         "P_LPSP_UI_Canvas(Clone)"
     };
+    private static FrontendReloadLandingTarget pendingFrontendReloadLandingTarget = FrontendReloadLandingTarget.Home;
 
     [Header("UI")]
     [SerializeField] private GameObject startMenuRoot;
@@ -32,6 +39,11 @@ public class ManualStartMenuController : MonoBehaviour
     [Header("Controls Content")]
     [SerializeField] private Sprite controlsSprite;
     [SerializeField] private bool preserveControlsImageAspect = true;
+
+    [Header("Homepage Background")]
+    [SerializeField] private Sprite homepageBackgroundSprite;
+    [SerializeField] private bool preserveHomepageBackgroundAspect = true;
+    [SerializeField] private Color homepageBackgroundTint = Color.white;
 
     [Header("Homepage Feedback")]
     [SerializeField] private AudioClip startButtonClickClip;
@@ -80,8 +92,28 @@ public class ManualStartMenuController : MonoBehaviour
     private bool listenersBound;
     private Coroutine gameplayUiRestoreRoutine;
     private Coroutine homepageRumbleRoutine;
+    private Coroutine pendingFrontendLandingRoutine;
+    private Image homepageBackgroundImage;
+    private Shadow homepageBackgroundShadow;
+    private Sprite defaultHomepageBackgroundSprite;
+    private Color defaultHomepageBackgroundColor = Color.white;
+    private Image.Type defaultHomepageBackgroundImageType = Image.Type.Simple;
+    private bool defaultHomepageBackgroundPreserveAspect;
+    private bool defaultHomepageBackgroundShadowEnabled;
+    private bool homepageBackgroundDefaultsCached;
 
     public bool IsFrontendVisible => IsObjectVisible(startMenuRoot) || IsObjectVisible(controlsPanel);
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetFrontendReloadLandingTarget()
+    {
+        pendingFrontendReloadLandingTarget = FrontendReloadLandingTarget.Home;
+    }
+
+    public static void RequestFrontendReloadLanding(FrontendReloadLandingTarget target)
+    {
+        pendingFrontendReloadLandingTarget = target;
+    }
 
     private void Start()
     {
@@ -90,9 +122,10 @@ public class ManualStartMenuController : MonoBehaviour
         if (configureButtonsOnStart)
             ConfigureButtons();
 
+        ApplyHomepagePresentation();
         ApplyControlsImage();
         BindButtonListeners();
-        EnterHomeMenu();
+        HandleInitialFrontendLanding();
     }
 
     private void Update()
@@ -118,6 +151,9 @@ public class ManualStartMenuController : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (pendingFrontendLandingRoutine != null)
+            StopCoroutine(pendingFrontendLandingRoutine);
+
         UnbindButtonListeners();
     }
 
@@ -125,6 +161,7 @@ public class ManualStartMenuController : MonoBehaviour
     {
         ResolvePauseSettingsUi();
         ResolveStartSelectionMenu();
+        ApplyHomepagePresentation();
         pauseSettingsUI?.SetFrontendBlocked(true);
         SetGameplayUiVisible(false);
         startSelectionMenu?.PrepareForDeferredShow();
@@ -168,11 +205,7 @@ public class ManualStartMenuController : MonoBehaviour
 
     public void StartGame()
     {
-        ExitHomeMenu();
-        SetCameraState(playerCamera, true);
-        SetAudioListenerState(playerAudioListener, true);
-        SetGameplayUiVisible(false);
-        ShowStartSelectionMenu();
+        EnterStartSelectionMenuLanding();
     }
 
     public void SetGameplayUiVisibleForGameplay(bool visible)
@@ -233,6 +266,128 @@ public class ManualStartMenuController : MonoBehaviour
 
         ConfigureMenuNavigation();
         ConfigureControlsNavigation();
+    }
+
+    private void HandleInitialFrontendLanding()
+    {
+        switch (ConsumeFrontendReloadLanding())
+        {
+            case FrontendReloadLandingTarget.StartSelectionMenu:
+                ResolveStartSelectionMenu();
+                startSelectionMenu?.PrepareForDeferredShow();
+                ExitHomeMenu();
+                pendingFrontendLandingRoutine = StartCoroutine(EnterStartSelectionMenuLandingNextFrame());
+                break;
+            default:
+                EnterHomeMenu();
+                break;
+        }
+    }
+
+    private IEnumerator EnterStartSelectionMenuLandingNextFrame()
+    {
+        yield return null;
+        pendingFrontendLandingRoutine = null;
+        EnterStartSelectionMenuLanding();
+    }
+
+    private void EnterStartSelectionMenuLanding()
+    {
+        ExitHomeMenu();
+        SetCameraState(playerCamera, true);
+        SetAudioListenerState(playerAudioListener, true);
+        SetGameplayUiVisible(false);
+        ShowStartSelectionMenu();
+    }
+
+    private static FrontendReloadLandingTarget ConsumeFrontendReloadLanding()
+    {
+        FrontendReloadLandingTarget landingTarget = pendingFrontendReloadLandingTarget;
+        pendingFrontendReloadLandingTarget = FrontendReloadLandingTarget.Home;
+        return landingTarget;
+    }
+
+    private void ApplyHomepagePresentation()
+    {
+        CacheHomepagePresentationDefaults();
+        ApplyHomepageBackground();
+        ApplyHomepageButtonOnlyLayout();
+    }
+
+    private void CacheHomepagePresentationDefaults()
+    {
+        if (startMenuRoot == null)
+            return;
+
+        if (homepageBackgroundImage == null)
+            homepageBackgroundImage = startMenuRoot.GetComponent<Image>();
+
+        if (homepageBackgroundShadow == null)
+            homepageBackgroundShadow = startMenuRoot.GetComponent<Shadow>();
+
+        if (homepageBackgroundDefaultsCached || homepageBackgroundImage == null)
+            return;
+
+        defaultHomepageBackgroundSprite = homepageBackgroundImage.sprite;
+        defaultHomepageBackgroundColor = homepageBackgroundImage.color;
+        defaultHomepageBackgroundImageType = homepageBackgroundImage.type;
+        defaultHomepageBackgroundPreserveAspect = homepageBackgroundImage.preserveAspect;
+        defaultHomepageBackgroundShadowEnabled = homepageBackgroundShadow != null && homepageBackgroundShadow.enabled;
+        homepageBackgroundDefaultsCached = true;
+    }
+
+    private void ApplyHomepageBackground()
+    {
+        if (homepageBackgroundImage == null)
+            return;
+
+        if (homepageBackgroundSprite != null)
+        {
+            homepageBackgroundImage.sprite = homepageBackgroundSprite;
+            homepageBackgroundImage.color = homepageBackgroundTint;
+            homepageBackgroundImage.type = Image.Type.Simple;
+            homepageBackgroundImage.preserveAspect = preserveHomepageBackgroundAspect;
+
+            if (homepageBackgroundShadow != null)
+                homepageBackgroundShadow.enabled = false;
+
+            return;
+        }
+
+        if (!homepageBackgroundDefaultsCached)
+            return;
+
+        homepageBackgroundImage.sprite = defaultHomepageBackgroundSprite;
+        homepageBackgroundImage.color = defaultHomepageBackgroundColor;
+        homepageBackgroundImage.type = defaultHomepageBackgroundImageType;
+        homepageBackgroundImage.preserveAspect = defaultHomepageBackgroundPreserveAspect;
+
+        if (homepageBackgroundShadow != null)
+            homepageBackgroundShadow.enabled = defaultHomepageBackgroundShadowEnabled;
+    }
+
+    private void ApplyHomepageButtonOnlyLayout()
+    {
+        if (startMenuRoot == null)
+            return;
+
+        bool hasHomepageButtons = startButton != null || controlsButton != null || quitButton != null;
+        if (!hasHomepageButtons)
+            return;
+
+        foreach (Transform child in startMenuRoot.transform)
+        {
+            if (child == null)
+                continue;
+
+            GameObject childObject = child.gameObject;
+            bool shouldRemainVisible = childObject == startButton?.gameObject ||
+                                       childObject == controlsButton?.gameObject ||
+                                       childObject == quitButton?.gameObject;
+
+            if (childObject.activeSelf != shouldRemainVisible)
+                childObject.SetActive(shouldRemainVisible);
+        }
     }
 
     private void ApplyControlsImage()

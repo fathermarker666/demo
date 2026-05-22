@@ -18,6 +18,8 @@ public class BullAI : MonoBehaviour
     private const float MissCommitDistance = 0.9f;
     private const float ChargeContactForwardEpsilon = 0.05f;
     private const float ChargeHitboxContactPadding = 0.01f;
+    private const float DirectAttackTriggerDistanceMultiplier = 0.5f;
+    private const float ConsecutiveAttackRecoveryBonusSeconds = 1f;
     private const string AnimationAttackForward = "Arm_Bull|Attack_F";
     private const string AnimationAttackForwardInPlace = "Arm_Bull|Attack_F_IP";
     private const string AnimationDeathLeft = "Arm_Bull|Death_L";
@@ -471,7 +473,17 @@ public class BullAI : MonoBehaviour
         }
     }
 
-    private bool ShouldTriggerAttack(float distance) => distance <= detectRange && ((playerStats.isHoldingCloth && distance <= tauntTriggerDistance) || distance <= dangerTriggerDistance);
+    private bool ShouldTriggerAttack(float distance)
+    {
+        if (distance > detectRange)
+            return false;
+
+        bool isHoldingCloth = playerStats != null && playerStats.isHoldingCloth;
+        if (isHoldingCloth)
+            return distance <= tauntTriggerDistance;
+
+        return distance <= GetDirectAttackTriggerDistance();
+    }
     private bool HasAutoAttackRequest() => enableAutoAttack && autoAttackPending;
     private bool HasActiveAutoAttack() => enableAutoAttack && (autoAttackPending || autoAttackCommitted);
     private float GetAutoAttackTelegraphRange()
@@ -484,6 +496,8 @@ public class BullAI : MonoBehaviour
     private float GetEngageApproachSpeed() => engageApproachSpeed * bullStats.GetApproachSpeedMultiplier() * (1f + (1f - bullStats.HealthNormalized) * 0.22f);
     private float GetTelegraphApproachSpeed() => telegraphApproachSpeed * bullStats.GetApproachSpeedMultiplier() * (1f + (1f - bullStats.HealthNormalized) * 0.28f);
     private float GetChargeSpeed() => chargeSpeed * bullStats.GetChargeSpeedMultiplier() * (1f + (1f - bullStats.HealthNormalized) * 0.2f);
+    private float GetDirectAttackTriggerDistance() => Mathf.Max(0.1f, dangerTriggerDistance * DirectAttackTriggerDistanceMultiplier);
+    private float GetConsecutiveAttackRecoveryDuration() => Mathf.Max(0f, attackRecoveryDuration + ConsecutiveAttackRecoveryBonusSeconds);
     private float GetChargeTimingDuration(float travelDistance)
     {
         float baseDuration = 1.55f * bullStats.GetChargeDelayMultiplier();
@@ -796,7 +810,7 @@ public class BullAI : MonoBehaviour
     {
         CompletePendingChargeTimingResolution(false);
         CancelAutoAttackAndReschedule();
-        currentState = BullState.Fatigued; ResetChargeQteState(); pendingCircleReset = circleAfterCharge; hasRoamTarget = false; stateTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.45f : UnityEngine.Random.Range(fatigueDurationRange.x, fatigueDurationRange.y); attackRecoveryTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.3f : attackRecoveryDuration; HideChargeTelegraph();
+        currentState = BullState.Fatigued; ResetChargeQteState(); pendingCircleReset = circleAfterCharge; hasRoamTarget = false; stateTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.45f : UnityEngine.Random.Range(fatigueDurationRange.x, fatigueDurationRange.y); attackRecoveryTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.3f : GetConsecutiveAttackRecoveryDuration(); HideChargeTelegraph();
         if (timingScript != null) timingScript.HideRingKeepFeedback();
     }
 

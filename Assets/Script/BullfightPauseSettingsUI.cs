@@ -530,32 +530,13 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private void ReturnToStartSelectionMenu()
     {
         CancelResetConfirmation();
-        ResolveReferencesIfNeeded();
-        if (startMenu == null)
-        {
-            GameObject startMenuObject = new GameObject("BullfightStartMenu");
-            startMenu = startMenuObject.AddComponent<BullfightStartMenu>();
-        }
-
-        manualStartMenu?.ExitHomeMenu();
-        CloseMenuForFrontendTransition();
-        startMenu.ReturnToStartSelectionMenu();
-        RefreshLabels();
+        ReloadToFrontendLanding(ManualStartMenuController.FrontendReloadLandingTarget.StartSelectionMenu);
     }
 
     private void EnterHomeMenu()
     {
         CancelResetConfirmation();
-        ResolveReferencesIfNeeded();
-        if (manualStartMenu != null)
-        {
-            CloseMenuForFrontendTransition();
-            manualStartMenu.EnterHomeMenu();
-            RefreshLabels();
-            return;
-        }
-
-        ReturnToStartSelectionMenu();
+        ReloadToFrontendLanding(ManualStartMenuController.FrontendReloadLandingTarget.Home);
     }
 
     private void CloseMenuForFrontendTransition()
@@ -592,6 +573,39 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         }
 
         ExecuteResetToHomeMenu();
+    }
+
+    private void ReloadToFrontendLanding(ManualStartMenuController.FrontendReloadLandingTarget landingTarget)
+    {
+        ResolveReferencesIfNeeded();
+        ManualStartMenuController.RequestFrontendReloadLanding(landingTarget);
+        SetFrontendBlocked(true);
+
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = previousFixedDeltaTime > 0f ? previousFixedDeltaTime : 0.02f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (playerController != null)
+        {
+            playerController.ClearInputBuffers();
+            playerController.ForceStopMovement();
+        }
+
+        if (gameFlow != null)
+        {
+            gameFlow.ReloadCurrentSceneToHomeMenu();
+            return;
+        }
+
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (!activeScene.IsValid())
+            return;
+
+        if (activeScene.buildIndex >= 0)
+            SceneManager.LoadScene(activeScene.buildIndex);
+        else
+            SceneManager.LoadScene(activeScene.name);
     }
 
     private void ExecuteResetToHomeMenu()
