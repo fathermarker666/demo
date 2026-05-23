@@ -11,7 +11,7 @@
   - Dual analog sticks on ADC1 pins
   - Buttons: A/B/X/Y/LB/RB/LT/RT
   - Sends controller packets over ESP-NOW every 20 ms
-  - Sends sensor packets over ESP-NOW every 50 ms
+  - Sends sensor packets over ESP-NOW every 20 ms
   - Accepts CAL from USB serial and from the paired receiver ESP32
 
   IMPORTANT:
@@ -25,7 +25,7 @@ constexpr uint8_t kSdaPin = 21;
 constexpr uint8_t kSclPin = 22;
 constexpr uint32_t kSerialBaud = 115200;
 constexpr uint32_t kI2cClock = 400000;
-constexpr uint32_t kSensorSampleIntervalMs = 50;
+constexpr uint32_t kSensorSampleIntervalMs = 20;
 constexpr uint32_t kControllerSampleIntervalMs = 20;
 constexpr uint32_t kCalibrationDurationMs = 350;
 constexpr float kAccelScaleLsbPerG = 16384.0f;

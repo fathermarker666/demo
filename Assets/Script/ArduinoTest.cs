@@ -22,8 +22,7 @@ public class ArduinoTest : MonoBehaviour
     [SerializeField] float maxForceValue = 50f;
     [SerializeField] string calibrationCommand = "CAL";
     [SerializeField] float sensorSignalTimeout = 1.2f;
-    [SerializeField] float phaseOneHoldEnterDeltaCm = 10f;
-    [SerializeField] float phaseOneHoldExitDeltaCm = -10f;
+    [SerializeField] float phaseOneHoldDistanceThresholdCm = 30f;
     [SerializeField] float phaseOneHoldSignalTimeout = 0.5f;
     [SerializeField] string virtualGamepadName = "ESP32 Virtual Gamepad";
 
@@ -35,8 +34,6 @@ public class ArduinoTest : MonoBehaviour
     float lastParsedForceAt = -999f;
     float lastUltrasonicDistanceCm = -1f;
     float lastUltrasonicMessageAt = -999f;
-    float restAnchorDistanceCm = float.NaN;
-    float holdAnchorDistanceCm = float.NaN;
     bool isUltrasonicHoldingCloth;
     string pendingSerialData = string.Empty;
     string lastSensorMessage = string.Empty;
@@ -99,12 +96,11 @@ public class ArduinoTest : MonoBehaviour
     void OpenPort()
     {
         ClosePort();
-        EnsurePhaseOneDeltaDefaults();
+        EnsurePhaseOneHoldThresholdDefault();
         lastSensorMessageAt = -999f;
         lastParsedForceAt = -999f;
         lastUltrasonicDistanceCm = -1f;
         lastUltrasonicMessageAt = -999f;
-        ResetUltrasonicHoldAnchors();
         pendingSerialData = string.Empty;
         lastSensorMessage = string.Empty;
         ResolvePlayerControllerIfNeeded(force: true);
@@ -350,37 +346,12 @@ public class ArduinoTest : MonoBehaviour
         lastUltrasonicDistanceCm = distanceCm;
         lastUltrasonicMessageAt = Time.unscaledTime;
 
-        if (!isUltrasonicHoldingCloth && float.IsNaN(restAnchorDistanceCm))
-        {
-            restAnchorDistanceCm = distanceCm;
+        bool shouldHoldCloth = distanceCm > phaseOneHoldDistanceThresholdCm;
+        if (shouldHoldCloth == isUltrasonicHoldingCloth)
             return true;
-        }
 
-        if (!isUltrasonicHoldingCloth)
-        {
-            float enterThreshold = Mathf.Abs(phaseOneHoldEnterDeltaCm);
-            float enterDelta = distanceCm - restAnchorDistanceCm;
-            if (enterDelta >= enterThreshold)
-            {
-                isUltrasonicHoldingCloth = true;
-                holdAnchorDistanceCm = distanceCm;
-                playerController.SetUltrasonicHoldActive(true);
-            }
-
-            return true;
-        }
-
-        if (float.IsNaN(holdAnchorDistanceCm))
-            holdAnchorDistanceCm = distanceCm;
-
-        if (distanceCm - holdAnchorDistanceCm <= phaseOneHoldExitDeltaCm)
-        {
-            isUltrasonicHoldingCloth = false;
-            holdAnchorDistanceCm = float.NaN;
-            restAnchorDistanceCm = distanceCm;
-            playerController.SetUltrasonicHoldActive(false);
-        }
-
+        isUltrasonicHoldingCloth = shouldHoldCloth;
+        playerController.SetUltrasonicHoldActive(shouldHoldCloth);
         return true;
     }
 
@@ -479,19 +450,10 @@ public class ArduinoTest : MonoBehaviour
         ClearUltrasonicHoldState();
     }
 
-    void EnsurePhaseOneDeltaDefaults()
+    void EnsurePhaseOneHoldThresholdDefault()
     {
-        if (Mathf.Approximately(phaseOneHoldEnterDeltaCm, 0f))
-            phaseOneHoldEnterDeltaCm = 10f;
-
-        if (Mathf.Approximately(phaseOneHoldExitDeltaCm, 0f))
-            phaseOneHoldExitDeltaCm = -10f;
-    }
-
-    void ResetUltrasonicHoldAnchors()
-    {
-        restAnchorDistanceCm = float.NaN;
-        holdAnchorDistanceCm = float.NaN;
+        if (phaseOneHoldDistanceThresholdCm <= 0f)
+            phaseOneHoldDistanceThresholdCm = 30f;
     }
 
     float NormalizeControllerAxis(int value)
@@ -502,11 +464,6 @@ public class ArduinoTest : MonoBehaviour
     void ClearUltrasonicHoldState(bool resetRestAnchor = true)
     {
         isUltrasonicHoldingCloth = false;
-        if (resetRestAnchor)
-            ResetUltrasonicHoldAnchors();
-        else
-            holdAnchorDistanceCm = float.NaN;
-
         playerController?.SetUltrasonicHoldActive(false);
     }
 
@@ -552,8 +509,6 @@ public class ArduinoTest : MonoBehaviour
     {
         if (isUltrasonicHoldingCloth)
             ClearUltrasonicHoldState();
-        else
-            ResetUltrasonicHoldAnchors();
 
         ResetVirtualGamepadState();
         playerController?.SetPhaseTwoCalibrationSensorHeld(false);
@@ -621,7 +576,6 @@ public class ArduinoTest : MonoBehaviour
             lastSensorMessage = string.Empty;
             lastUltrasonicDistanceCm = -1f;
             lastUltrasonicMessageAt = -999f;
-            ResetUltrasonicHoldAnchors();
             ResetVirtualGamepadState();
         }
     }
