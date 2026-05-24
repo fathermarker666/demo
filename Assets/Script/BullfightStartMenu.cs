@@ -7,6 +7,7 @@ using UnityEngine.UI;
 public class BullfightStartMenu : MonoBehaviour
 {
     private static Font cachedFont;
+    private static Font cachedCjkFont;
 
     [Header("Text")]
     [SerializeField] private string titleText = "西班牙鬥牛";
@@ -537,6 +538,7 @@ public class BullfightStartMenu : MonoBehaviour
         text.color = color;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Truncate;
+        ApplyLocalizedFont(text, content, fontSize, wrap: true, VerticalWrapMode.Truncate);
         return text;
     }
 
@@ -554,6 +556,68 @@ public class BullfightStartMenu : MonoBehaviour
         }, 18);
 
         return cachedFont;
+    }
+
+    private static Font GetCjkUiFont()
+    {
+        if (cachedCjkFont != null)
+            return cachedCjkFont;
+
+        cachedCjkFont = Resources.Load<Font>("Cubic_11");
+        if (cachedCjkFont == null)
+            cachedCjkFont = GetUiFont();
+
+        return cachedCjkFont;
+    }
+
+    private static void ApplyLocalizedFont(Text text, string value, int fontSize, bool wrap, VerticalWrapMode verticalOverflow)
+    {
+        if (text == null)
+            return;
+
+        bool useCjkFont = ContainsCjk(value);
+        text.font = useCjkFont ? GetCjkUiFont() : GetUiFont();
+        text.fontSize = fontSize;
+        text.alignByGeometry = useCjkFont;
+        text.supportRichText = false;
+        text.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+        text.verticalOverflow = verticalOverflow;
+
+        if (useCjkFont)
+        {
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = Mathf.Max(12, Mathf.RoundToInt(fontSize * 0.72f));
+            text.resizeTextMaxSize = fontSize;
+            return;
+        }
+
+        text.resizeTextForBestFit = false;
+        text.resizeTextMinSize = fontSize;
+        text.resizeTextMaxSize = fontSize;
+    }
+
+    private static bool ContainsCjk(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (IsCjkCharacter(value[index]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsCjkCharacter(char character)
+    {
+        int codePoint = character;
+        return (codePoint >= 0x3400 && codePoint <= 0x9FFF) ||
+               (codePoint >= 0x3000 && codePoint <= 0x303F) ||
+               (codePoint >= 0x3100 && codePoint <= 0x312F) ||
+               (codePoint >= 0x31A0 && codePoint <= 0x31BF) ||
+               (codePoint >= 0xFF00 && codePoint <= 0xFFEF);
     }
 
     private GameObject CreateBorder(Transform parent, Vector2 anchoredPosition, Vector2 size)

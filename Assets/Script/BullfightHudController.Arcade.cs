@@ -242,7 +242,10 @@ public partial class BullfightHudController
         {
             arcadeToastTimer = 1.4f;
             if (arcadeToastText != null)
+            {
                 arcadeToastText.text = string.IsNullOrEmpty(scoreEvent.ToastText) ? "本局不計入排行榜" : scoreEvent.ToastText;
+                ApplyLocalizedUiFont(arcadeToastText, arcadeToastText.text, 24, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: 18);
+            }
             return;
         }
 
@@ -747,6 +750,7 @@ public partial class BullfightHudController
             arcadeFinalResultHint.gameObject.SetActive(true);
             arcadeFinalResultHint.color = textColor;
             arcadeFinalResultHint.text = canDismiss ? "A \u7e7c\u7e8c / 30\u79d2\u5f8c\u81ea\u52d5\u95dc\u9589" : "\u7d50\u7b97\u4e2d...";
+            ApplyLocalizedUiFont(arcadeFinalResultHint, arcadeFinalResultHint.text, 24, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: 18);
         }
 
         bool dismissRequested = activeArcadeRunSummaryTimer >= 2.5f && WasArcadeConfirmRequestedThisFrame();
@@ -1077,8 +1081,7 @@ public partial class BullfightHudController
         text.color = color;
         text.text = value;
         text.raycastTarget = false;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
+        ApplyLocalizedUiFont(text, value, fontSize, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, fontSize - 6));
     }
 
     private static void StretchToFillParent(RectTransform rect)

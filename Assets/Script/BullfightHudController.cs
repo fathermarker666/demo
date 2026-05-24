@@ -17,6 +17,8 @@ public partial class BullfightHudController : MonoBehaviour
     }
 
     private static Font cachedUiFont;
+    private static Font cachedCjkUiFont;
+
     [SerializeField] private Font arcadeAccentFont;
     [SerializeField] private string hudCanvasName = "HUD_Canvas";
     [SerializeField] private string legacyHudCanvasName = "P_LPSP_UI_Canvas";
@@ -393,6 +395,7 @@ public partial class BullfightHudController : MonoBehaviour
         label.fontStyle = FontStyle.Bold;
         label.color = labelColor;
         label.text = labelText;
+        ApplyLocalizedUiFont(label, labelText, label.fontSize, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, label.fontSize - 6));
     }
 
     private void CachePlayerStaminaFillColor()
@@ -467,6 +470,7 @@ public partial class BullfightHudController : MonoBehaviour
             phaseTwoForceLabel.fontStyle = FontStyle.Bold;
             phaseTwoForceLabel.color = playerStaminaLabelColor;
             phaseTwoForceLabel.text = "\u529b\u9053";
+            ApplyLocalizedUiFont(phaseTwoForceLabel, phaseTwoForceLabel.text, phaseTwoForceLabel.fontSize, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, phaseTwoForceLabel.fontSize - 4));
         }
 
         phaseTwoForceValue = GetOrCreateUiText(phaseTwoForceSlider.transform as RectTransform, phaseTwoForceValueName);
@@ -721,6 +725,7 @@ public partial class BullfightHudController : MonoBehaviour
             return;
 
         phaseLabel.text = GetPhaseLabel(gameFlow.currentPhase, gameFlow.currentEnding);
+        ApplyLocalizedUiFont(phaseLabel, phaseLabel.text, phaseFontSize, wrap: false, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, phaseFontSize - 4));
     }
 
     private void UpdatePhaseTwoHud()
@@ -1074,6 +1079,7 @@ public partial class BullfightHudController : MonoBehaviour
         text.fontStyle = FontStyle.Bold;
         text.color = bullBossTitleColor;
         text.text = value;
+        ApplyLocalizedUiFont(text, value, phaseTwoInfoFontSize, wrap: false, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, phaseTwoInfoFontSize - 4));
     }
 
     private void ConfigureCenteredText(Text text, Vector2 anchoredPosition, int fontSize, Color color, FontStyle style, string value)
@@ -1094,6 +1100,7 @@ public partial class BullfightHudController : MonoBehaviour
         text.fontStyle = style;
         text.color = color;
         text.text = value;
+        ApplyLocalizedUiFont(text, value, fontSize, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, fontSize - 8));
         text.gameObject.SetActive(!string.IsNullOrEmpty(value));
     }
 
@@ -1114,13 +1121,16 @@ public partial class BullfightHudController : MonoBehaviour
         text.fontSize = fontSize;
         text.fontStyle = FontStyle.Normal;
         text.color = color;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = useBestFit ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
-        text.resizeTextForBestFit = useBestFit;
-        text.resizeTextMinSize = useBestFit ? 18 : fontSize;
-        text.resizeTextMaxSize = fontSize;
-        text.lineSpacing = useBestFit ? 0.88f : 1f;
         text.text = value;
+        ApplyLocalizedUiFont(
+            text,
+            value,
+            fontSize,
+            wrap: true,
+            useBestFit ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow,
+            allowBestFit: useBestFit || ContainsCjk(value),
+            minBestFitSize: useBestFit ? 18 : Mathf.Max(14, fontSize - 6),
+            cjkLineSpacing: useBestFit ? 0.88f : 0.94f);
         text.gameObject.SetActive(!string.IsNullOrEmpty(value));
     }
 
@@ -1213,6 +1223,80 @@ public partial class BullfightHudController : MonoBehaviour
         }, 18);
 
         return cachedUiFont;
+    }
+
+    private static Font GetCjkUiFont()
+    {
+        if (cachedCjkUiFont != null)
+            return cachedCjkUiFont;
+
+        cachedCjkUiFont = Resources.Load<Font>("Cubic_11");
+        if (cachedCjkUiFont == null)
+            cachedCjkUiFont = GetUiFont();
+
+        return cachedCjkUiFont;
+    }
+
+    private static void ApplyLocalizedUiFont(
+        Text text,
+        string value,
+        int fontSize,
+        bool wrap,
+        VerticalWrapMode verticalOverflow,
+        bool allowBestFit = true,
+        int minBestFitSize = 0,
+        float cjkLineSpacing = 1f)
+    {
+        if (text == null)
+            return;
+
+        bool useCjkFont = ContainsCjk(value);
+        text.font = useCjkFont ? GetCjkUiFont() : GetUiFont();
+        text.fontSize = fontSize;
+        text.alignByGeometry = useCjkFont;
+        text.supportRichText = false;
+        text.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+        text.verticalOverflow = verticalOverflow;
+        text.lineSpacing = useCjkFont ? cjkLineSpacing : 1f;
+
+        if (useCjkFont && allowBestFit)
+        {
+            int resolvedMinSize = minBestFitSize > 0
+                ? minBestFitSize
+                : Mathf.Max(10, Mathf.RoundToInt(fontSize * 0.72f));
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = Mathf.Min(resolvedMinSize, fontSize);
+            text.resizeTextMaxSize = fontSize;
+            return;
+        }
+
+        text.resizeTextForBestFit = false;
+        text.resizeTextMinSize = fontSize;
+        text.resizeTextMaxSize = fontSize;
+    }
+
+    private static bool ContainsCjk(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (IsCjkCharacter(value[index]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsCjkCharacter(char character)
+    {
+        int codePoint = character;
+        return (codePoint >= 0x3400 && codePoint <= 0x9FFF) ||
+               (codePoint >= 0x3000 && codePoint <= 0x303F) ||
+               (codePoint >= 0x3100 && codePoint <= 0x312F) ||
+               (codePoint >= 0x31A0 && codePoint <= 0x31BF) ||
+               (codePoint >= 0xFF00 && codePoint <= 0xFFEF);
     }
 
     private void ApplyArcadeAccentFont(Text text)

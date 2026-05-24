@@ -58,6 +58,8 @@ public partial class BullfightGameFlow : MonoBehaviour
     private Light cachedMainDirectionalLight;
     private float defaultDirectionalIntensity;
     private Color defaultDirectionalColor;
+    private static Font cachedRuntimeUiFont;
+    private static Font cachedRuntimeCjkFont;
     private void ApplyPhaseTwoLighting()
     {
         CacheDefaultLightingIfNeeded();
@@ -77,8 +79,6 @@ public partial class BullfightGameFlow : MonoBehaviour
             }
         }
     }
-    private static Font cachedRuntimeUiFont;
-
     public enum GamePhase
     {
         PhaseZeroTutorial,
@@ -2606,6 +2606,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         endingSkipLabel.color = new Color(1f, 0.92f, 0.32f, 1f);
         endingSkipLabel.raycastTarget = false;
         endingSkipLabel.text = GetEndingSkipInstructionText(35f, false);
+        ApplyLocalizedRuntimeFont(endingSkipLabel, endingSkipLabel.text, 28, wrap: true, VerticalWrapMode.Truncate, 20, 0.92f);
 
         Outline labelOutline = labelObject.AddComponent<Outline>();
         labelOutline.effectColor = new Color(0f, 0f, 0f, 0.95f);
@@ -2632,6 +2633,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         endingSkipForceLabel.color = new Color(0.98f, 0.92f, 0.62f, 1f);
         endingSkipForceLabel.raycastTarget = false;
         endingSkipForceLabel.text = "\u529b\u9053 0% / \u9580\u6abb70%";
+        ApplyLocalizedRuntimeFont(endingSkipForceLabel, endingSkipForceLabel.text, 20, wrap: false, VerticalWrapMode.Truncate, 14);
 
         Outline forceOutline = forceObject.AddComponent<Outline>();
         forceOutline.effectColor = new Color(0f, 0f, 0f, 0.9f);
@@ -2691,12 +2693,14 @@ public partial class BullfightGameFlow : MonoBehaviour
             endingSkipLabel.color = canSkip
                 ? new Color(1f, 0.98f, 0.45f, 1f)
                 : new Color(0.98f, 0.88f, 0.42f, 1f);
+            ApplyLocalizedRuntimeFont(endingSkipLabel, endingSkipLabel.text, 28, wrap: true, VerticalWrapMode.Truncate, 20, 0.92f);
         }
 
         if (endingSkipForceLabel != null)
         {
             endingSkipForceLabel.text = $"\u529b\u9053 {forcePercent}% / \u9580\u6abb{thresholdPercent}%";
             endingSkipForceLabel.color = forceColor;
+            ApplyLocalizedRuntimeFont(endingSkipForceLabel, endingSkipForceLabel.text, 20, wrap: false, VerticalWrapMode.Truncate, 14);
         }
 
         if (endingSkipForceBarFill != null)
@@ -2763,6 +2767,69 @@ public partial class BullfightGameFlow : MonoBehaviour
         return cachedRuntimeUiFont;
     }
 
+    private static Font GetRuntimeCjkUiFont()
+    {
+        if (cachedRuntimeCjkFont != null)
+            return cachedRuntimeCjkFont;
+
+        cachedRuntimeCjkFont = Resources.Load<Font>("Cubic_11");
+        if (cachedRuntimeCjkFont == null)
+            cachedRuntimeCjkFont = GetRuntimeUiFont();
+
+        return cachedRuntimeCjkFont;
+    }
+
+    private static void ApplyLocalizedRuntimeFont(Text text, string value, int fontSize, bool wrap, VerticalWrapMode verticalOverflow, int minBestFitSize, float cjkLineSpacing = 1f)
+    {
+        if (text == null)
+            return;
+
+        bool useCjkFont = ContainsCjk(value);
+        text.font = useCjkFont ? GetRuntimeCjkUiFont() : GetRuntimeUiFont();
+        text.fontSize = fontSize;
+        text.alignByGeometry = useCjkFont;
+        text.supportRichText = false;
+        text.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+        text.verticalOverflow = verticalOverflow;
+        text.lineSpacing = useCjkFont ? cjkLineSpacing : 1f;
+
+        if (useCjkFont)
+        {
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = Mathf.Min(minBestFitSize, fontSize);
+            text.resizeTextMaxSize = fontSize;
+            return;
+        }
+
+        text.resizeTextForBestFit = false;
+        text.resizeTextMinSize = fontSize;
+        text.resizeTextMaxSize = fontSize;
+    }
+
+    private static bool ContainsCjk(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (IsCjkCharacter(value[index]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsCjkCharacter(char character)
+    {
+        int codePoint = character;
+        return (codePoint >= 0x3400 && codePoint <= 0x9FFF) ||
+               (codePoint >= 0x3000 && codePoint <= 0x303F) ||
+               (codePoint >= 0x3100 && codePoint <= 0x312F) ||
+               (codePoint >= 0x31A0 && codePoint <= 0x31BF) ||
+               (codePoint >= 0xFF00 && codePoint <= 0xFFEF);
+    }
+
     private void ShowEndingSkipUi(bool visible)
     {
         if (endingSkipRoot != null)
@@ -2807,6 +2874,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         tutorialCompletionSkipLabel.color = new Color(1f, 0.98f, 0.45f, 1f);
         tutorialCompletionSkipLabel.raycastTarget = false;
         tutorialCompletionSkipLabel.text = GetTutorialCompletionSkipInstructionText();
+        ApplyLocalizedRuntimeFont(tutorialCompletionSkipLabel, tutorialCompletionSkipLabel.text, 24, wrap: false, VerticalWrapMode.Truncate, 18);
 
         Outline outline = labelObject.AddComponent<Outline>();
         outline.effectColor = new Color(0f, 0f, 0f, 0.92f);

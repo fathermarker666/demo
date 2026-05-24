@@ -39,8 +39,8 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
     private CameraLook cameraLook;
     private bool cameraLookWasEnabled;
-
     private static Font cachedFont;
+    private static Font cachedCjkFont;
 
     private Canvas canvas;
     private GameObject panelRoot;
@@ -404,6 +404,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         text.color = new Color(0.97f, 0.93f, 0.84f, 1f);
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Truncate;
+        ApplyLocalizedFont(text, value, fontSize, wrap: true, VerticalWrapMode.Truncate, Mathf.Max(12, fontSize - 8));
         RectTransform rect = textObject.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -427,6 +428,69 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         }, 18);
 
         return cachedFont;
+    }
+
+    private static Font GetCjkUiFont()
+    {
+        if (cachedCjkFont != null)
+            return cachedCjkFont;
+
+        cachedCjkFont = Resources.Load<Font>("Cubic_11");
+        if (cachedCjkFont == null)
+            cachedCjkFont = GetUiFont();
+
+        return cachedCjkFont;
+    }
+
+    private static void ApplyLocalizedFont(Text text, string value, int fontSize, bool wrap, VerticalWrapMode verticalOverflow, int minBestFitSize, float cjkLineSpacing = 1f)
+    {
+        if (text == null)
+            return;
+
+        bool useCjkFont = ContainsCjk(value);
+        text.font = useCjkFont ? GetCjkUiFont() : GetUiFont();
+        text.fontSize = fontSize;
+        text.alignByGeometry = useCjkFont;
+        text.supportRichText = false;
+        text.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+        text.verticalOverflow = verticalOverflow;
+        text.lineSpacing = useCjkFont ? cjkLineSpacing : 1f;
+
+        if (useCjkFont)
+        {
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = Mathf.Min(minBestFitSize, fontSize);
+            text.resizeTextMaxSize = fontSize;
+            return;
+        }
+
+        text.resizeTextForBestFit = false;
+        text.resizeTextMinSize = fontSize;
+        text.resizeTextMaxSize = fontSize;
+    }
+
+    private static bool ContainsCjk(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (IsCjkCharacter(value[index]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsCjkCharacter(char character)
+    {
+        int codePoint = character;
+        return (codePoint >= 0x3400 && codePoint <= 0x9FFF) ||
+               (codePoint >= 0x3000 && codePoint <= 0x303F) ||
+               (codePoint >= 0x3100 && codePoint <= 0x312F) ||
+               (codePoint >= 0x31A0 && codePoint <= 0x31BF) ||
+               (codePoint >= 0xFF00 && codePoint <= 0xFFEF);
     }
 
     private void ApplyArcadeAccentFontIfSafe(Text text, string name, string value)
@@ -887,7 +951,10 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private void RefreshLabels()
     {
         if (toggleHintLabel != null)
+        {
             toggleHintLabel.text = "LB 開啟設定";
+            ApplyLocalizedFont(toggleHintLabel, toggleHintLabel.text, 22, wrap: true, VerticalWrapMode.Truncate, 16);
+        }
 
         if (audioController != null)
         {
@@ -909,10 +976,14 @@ public class BullfightPauseSettingsUI : MonoBehaviour
                 : resetConfirmationArmed
                     ? "再按一次 RB 會完整重載並回到首頁，其他操作會取消重置確認。\n左蘑菇頭：BGM   右蘑菇頭：SFX"
                     : "RB：重置遊戲   Y：開始選單   B：操作說明   X：回首頁   A：返回遊戲\n左蘑菇頭：BGM   右蘑菇頭：SFX";
+            ApplyLocalizedFont(helpLabel, helpLabel.text, 18, wrap: true, VerticalWrapMode.Truncate, 14, 0.94f);
         }
 
         if (resetActionLabel != null)
+        {
             resetActionLabel.text = resetConfirmationArmed ? "確認重置 (RB)" : "重置遊戲 (RB)";
+            ApplyLocalizedFont(resetActionLabel, resetActionLabel.text, 28, wrap: true, VerticalWrapMode.Truncate, 20);
+        }
 
         if (controlsOverlayImage != null)
         {
