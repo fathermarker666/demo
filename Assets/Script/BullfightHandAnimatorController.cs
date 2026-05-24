@@ -59,6 +59,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
     [Header("Rig Prop Detection")]
     [SerializeField] private string adoptedRigClothPropName = "Cape";
     [SerializeField] private string adoptedRigSwordPropName = "Rapier_lowpoly";
+    [SerializeField] private string adoptedRigThrowKnifePropName = "ThrowKnifeVisual";
 
     [Header("Adopted Rig Offsets")]
     [SerializeField] private Vector3 adoptedRigLocalPositionOffset = new Vector3(-1.54f, -1.5f, 0.38f);
@@ -81,6 +82,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
     private bool adoptedRigBasePoseCached;
     private Transform adoptedRigClothProp;
     private Transform adoptedRigSwordProp;
+    private Transform adoptedRigThrowKnifeProp;
     private bool throwSpawnTriggered;
     private Transform presentationRoot;
     private bool rigSetupDirty = true;
@@ -378,6 +380,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
             return;
 
         PlayTransient(HandState.UseSword);
+        BullfightActionVfxController.PlayPhaseTwoSwordSwingVfx();
     }
 
     private void PlayTransient(HandState state)
@@ -608,6 +611,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
             adoptedRigBasePoseCached = false;
             adoptedRigClothProp = null;
             adoptedRigSwordProp = null;
+            adoptedRigThrowKnifeProp = null;
         }
 
         if (!adoptedRigBasePoseCached || parentChanged)
@@ -862,6 +866,10 @@ public class BullfightHandAnimatorController : MonoBehaviour
         HandPropVisibility visibility = GetCurrentPropVisibility();
         SetPropActive(adoptedRigClothProp, visibility == HandPropVisibility.Cloth);
         SetPropActive(adoptedRigSwordProp, visibility == HandPropVisibility.Sword);
+
+        bool isPhaseTwo = gameFlow != null &&
+                          gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo;
+        SetPropActive(adoptedRigThrowKnifeProp, !isPhaseTwo);
     }
 
     private void CacheAdoptedRigPropReferences(Transform rigRoot)
@@ -874,6 +882,9 @@ public class BullfightHandAnimatorController : MonoBehaviour
 
         if (adoptedRigSwordProp == null)
             adoptedRigSwordProp = FindDescendantByName(rigRoot, adoptedRigSwordPropName, null);
+
+        if (adoptedRigThrowKnifeProp == null)
+            adoptedRigThrowKnifeProp = FindDescendantByName(rigRoot, adoptedRigThrowKnifePropName, null);
     }
 
     private static void SetPropActive(Transform propRoot, bool visible)

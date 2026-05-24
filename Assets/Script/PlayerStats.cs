@@ -163,6 +163,7 @@ public class PlayerStats : MonoBehaviour
         _ = GetComponent<BullfightStunVfx>() ?? gameObject.AddComponent<BullfightStunVfx>();
         //_ = GetComponent<BullfightAudioController>() ?? gameObject.AddComponent<BullfightAudioController>();
         _ = GetComponent<BullfightPerfectDodgeVfx>() ?? gameObject.AddComponent<BullfightPerfectDodgeVfx>();
+        _ = GetComponent<BullfightActionVfxController>() ?? gameObject.AddComponent<BullfightActionVfxController>();
         stunVfx = GetComponent<BullfightStunVfx>();
         handAnimatorController = GetComponent<BullfightHandAnimatorController>();
         shooterCharacter = GetComponent<Character>();
@@ -407,6 +408,7 @@ public class PlayerStats : MonoBehaviour
         float previousHealth = currentHealth;
         TakeDamage(amount);
         if (currentHealth >= previousHealth) return;
+        BullfightActionVfxController.PlayBullChargeImpactVfx(impactSource, transform.position);
         ApplyKnockback(impactSource, knockbackDistance, knockbackDuration);
         stunVfx?.TriggerBullImpactBurst();
         ForceStun();
@@ -563,6 +565,7 @@ public class PlayerStats : MonoBehaviour
     {
         AddStamina(perfectDodgeStaminaRestore);
         perfectDodgeBuffTimer = Mathf.Max(perfectDodgeBuffTimer, perfectDodgeDuration);
+        BullfightActionVfxController.PlayPerfectDodgeSuccessVfx();
         ApplyPerfectDodgeBuffState(perfectDodgeBuffTimer > 0f);
         PlayGamepadRumble(perfectRumbleLow, perfectRumbleHigh, perfectRumbleDuration);
     }

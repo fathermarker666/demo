@@ -1869,6 +1869,7 @@ public partial class BullfightGameFlow : MonoBehaviour
             nextRoundHasPerfectAdvantage = true;
 
             PlayPhaseTwoStabPresentationFeedback();
+            BullfightActionVfxController.PlayPhaseTwoSwordHitVfx();
             bullAI?.PlayPhaseTwoHitReaction(result == "Perfect!");
         }
         else

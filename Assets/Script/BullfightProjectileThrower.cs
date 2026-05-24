@@ -85,13 +85,15 @@ public class BullfightProjectileThrower : MonoBehaviour
         if (HasMissingReferences())
             ResolveReferencesIfNeeded();
 
+        EnsureProjectileSpawnAnchor();
+        BullfightActionVfxController.PlayBanderillasThrowVfx(projectileSpawnAnchor);
+
         if (IsPhaseOneDirectDamageActive())
         {
             pendingThrow = false;
             return;
         }
 
-        EnsureProjectileSpawnAnchor();
         SpawnProjectile();
         pendingThrow = false;
     }
