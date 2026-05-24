@@ -1752,6 +1752,74 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 134860075}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &138180273
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1825647893}
+    m_Modifications:
+    - target: {fileID: 2579547315633413871, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_Name
+      value: SeaxKnife
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.008
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.043
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.011
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.79699814
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.16338104
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.29162222
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.5030477
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 1.889
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 39.018
+      objectReference: {fileID: 0}
+    - target: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: -63.849
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: ca65deb719f7b1142823272311535f82, type: 3}
 --- !u!4 &143762166 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4000011161899254, guid: 835d59177d8bad543a70828252cdccaf,
@@ -17490,8 +17558,7 @@ MonoBehaviour:
   maxForceValue: 50
   calibrationCommand: CAL
   sensorSignalTimeout: 1.2
-  phaseOneHoldEnterDeltaCm: 10
-  phaseOneHoldExitDeltaCm: -10
+  phaseOneHoldDistanceThresholdCm: 30
   phaseOneHoldSignalTimeout: 0.5
   virtualGamepadName: ESP32 Virtual Gamepad
 --- !u!4 &513949636
@@ -18243,6 +18310,12 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 835d59177d8bad543a70828252cdccaf, type: 3}
+--- !u!4 &565644405 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2971599726731917828, guid: ca65deb719f7b1142823272311535f82,
+    type: 3}
+  m_PrefabInstance: {fileID: 138180273}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &574006830
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -94588,6 +94661,38 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 1c5a9772a26e4b74991250d48f83f849, type: 3}
+--- !u!1 &1825647892
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1825647893}
+  m_Layer: 0
+  m_Name: ThrowKnifeVisual
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1825647893
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1825647892}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 565644405}
+  m_Father: {fileID: 2103678071}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1826113826
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -103605,6 +103710,12 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1252331715}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &2103678071 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5556758416276159567, guid: 562583a23c45dfb4fba5da4925b9255a,
+    type: 3}
+  m_PrefabInstance: {fileID: 808895838693217455}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &2107105136
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -104292,6 +104403,10 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 706916769}
+    - targetCorrespondingSourceObject: {fileID: 5556758416276159567, guid: 562583a23c45dfb4fba5da4925b9255a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1825647893}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 562583a23c45dfb4fba5da4925b9255a, type: 3}
 --- !u!1001 &2597785419840713525
