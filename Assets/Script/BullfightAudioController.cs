@@ -27,7 +27,8 @@ public class BullfightAudioController : MonoBehaviour
         PlayerHit, PlayerStun, PlayerRecover, BullTelegraph,
         BullCharge, BullFatigue, BullHurt, BullDeath,
         TimingPerfect, TimingGood, TimingMiss,
-        HeartbeatLoop, CrowdCheer
+        HeartbeatLoop, CrowdCheer, CrowdDisappointment,
+        PlayerBreathLoop
     }
 
     private enum BullStateAudioMode
@@ -85,7 +86,9 @@ public class BullfightAudioController : MonoBehaviour
 
     [Header("Feedback SFX")]
     [SerializeField] private AudioCue heartbeatLoopCue = new AudioCue { volume = 0.22f, pitch = 1f, spatialBlend = 0f };
-    [SerializeField] private AudioCue crowdCheerCue = new AudioCue { volume = 0.4f, pitch = 1f, spatialBlend = 0f };
+    [SerializeField] private AudioCue playerBreathLoopCue = new AudioCue { volume = 0.24f, pitch = 1f, spatialBlend = 0f };
+    [SerializeField] private AudioCue crowdCheerCue = new AudioCue { volume = 0.4f, pitch = 1f, spatialBlend = 1f };
+    [SerializeField] private AudioCue crowdDisappointmentCue = new AudioCue { volume = 0.38f, pitch = 0.96f, spatialBlend = 1f };
     [SerializeField] private float crowdCheerCooldown = 0.45f;
 
     private const string BgmVolumePrefKey = "Bullfight.Audio.BgmVolume";
@@ -99,6 +102,7 @@ public class BullfightAudioController : MonoBehaviour
     private BullAI bullAI;
     private BullTimingRing timingRing;
     private BullfightGameFlow gameFlow;
+    private BullfightSpawnManager spawnManager;
     private ManualStartMenuController manualStartMenu;
     private BullfightStartMenu startMenu;
 
@@ -108,12 +112,14 @@ public class BullfightAudioController : MonoBehaviour
     private BullAI trackedBullAI;
     private BullfightArcadeScoring trackedArcadeScoring;
     private AudioSource bullStateSource;
+    private AudioSource bullIdleSource;
     private AudioSource heartbeatLoopSource;
+    private AudioSource playerBreathLoopSource;
     private BullStateAudioMode activeBullStateAudioMode;
     private float idleTimer = 0f;
     private bool sfxSuppressed;
     private bool temporaryGameplaySfxBlocked;
-    private float lastCrowdCheerAt = -999f;
+    private float lastCrowdReactionAt = -999f;
 
     private void Awake()
     {
@@ -152,6 +158,7 @@ public class BullfightAudioController : MonoBehaviour
         SyncTemporaryGameplayBlockState();
         SyncBullStateAudio();
         SyncHeartbeatLoop();
+        SyncPlayerBreathLoop();
         HandleBullIdleAmbient();
     }
 
@@ -313,11 +320,13 @@ public class BullfightAudioController : MonoBehaviour
     {
         if (playerStats == null) playerStats = BullfightSceneCache.GetLocalOrScene<PlayerStats>(this);
         if (playerAnchor == null) playerAnchor = playerStats != null ? playerStats.transform : transform;
+        if (spawnManager == null && playerStats != null) spawnManager = playerStats.GetComponent<BullfightSpawnManager>();
         if (bullAI == null) bullAI = BullfightSceneCache.FindObject<BullAI>();
         if (bullStats == null) bullStats = bullAI != null ? bullAI.GetComponent<BullStats>() : BullfightSceneCache.FindObject<BullStats>();
         if (bullAnchor == null && bullAI != null) bullAnchor = bullAI.transform;
         if (timingRing == null) timingRing = BullfightSceneCache.FindObject<BullTimingRing>();
         if (gameFlow == null) gameFlow = BullfightSceneCache.FindObject<BullfightGameFlow>();
+        if (spawnManager == null) spawnManager = BullfightSceneCache.FindObject<BullfightSpawnManager>();
         if (manualStartMenu == null) manualStartMenu = FindObjectOfType<ManualStartMenuController>(true);
         if (startMenu == null) startMenu = FindObjectOfType<BullfightStartMenu>(true);
     }
@@ -325,7 +334,9 @@ public class BullfightAudioController : MonoBehaviour
     private void EnsureRuntimeSources()
     {
         bullStateSource ??= GetOrCreateRuntimeSource("BullStateSource", true);
+        bullIdleSource ??= GetOrCreateRuntimeSource("BullIdleSource", false);
         heartbeatLoopSource ??= GetOrCreateRuntimeSource("HeartbeatLoopSource", true);
+        playerBreathLoopSource ??= GetOrCreateRuntimeSource("PlayerBreathLoopSource", true);
     }
 
     private AudioSource GetOrCreateRuntimeSource(string objectName, bool loop)
@@ -438,8 +449,14 @@ public class BullfightAudioController : MonoBehaviour
         if (bullStateSource != null && bullAnchor != null)
             bullStateSource.transform.position = bullAnchor.position;
 
+        if (bullIdleSource != null && bullAnchor != null)
+            bullIdleSource.transform.position = bullAnchor.position;
+
         if (heartbeatLoopSource != null && playerAnchor != null)
             heartbeatLoopSource.transform.position = playerAnchor.position;
+
+        if (playerBreathLoopSource != null && playerAnchor != null)
+            playerBreathLoopSource.transform.position = playerAnchor.position;
     }
 
     private void SyncTemporaryGameplayBlockState()
@@ -535,7 +552,7 @@ public class BullfightAudioController : MonoBehaviour
             !playerStats.IsDead &&
             playerStats.isHoldingCloth &&
             gameFlow != null &&
-            gameFlow.currentPhase != BullfightGameFlow.GamePhase.Ending;
+            gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseOne;
 
         if (!shouldPlayHeartbeat)
         {
@@ -544,6 +561,28 @@ public class BullfightAudioController : MonoBehaviour
         }
 
         PlayRuntimeCue(heartbeatLoopSource, heartbeatLoopCue, PlaceholderCue.HeartbeatLoop, playerAnchor, true);
+    }
+
+    private void SyncPlayerBreathLoop()
+    {
+        if (playerBreathLoopSource == null)
+            return;
+
+        bool shouldPlayBreath =
+            !IsGameplaySfxBlocked() &&
+            playerStats != null &&
+            !playerStats.IsDead &&
+            gameFlow != null &&
+            gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo &&
+            gameFlow.CurrentPhaseTwoState == BullfightGameFlow.PhaseTwoState.Standoff;
+
+        if (!shouldPlayBreath)
+        {
+            StopRuntimeSource(playerBreathLoopSource);
+            return;
+        }
+
+        PlayRuntimeCue(playerBreathLoopSource, playerBreathLoopCue, PlaceholderCue.PlayerBreathLoop, playerAnchor, true);
     }
 
     private void HandleArcadeScoreEventQueued(ArcadeScoreEvent scoreEvent)
@@ -561,12 +600,8 @@ public class BullfightAudioController : MonoBehaviour
 
         return scoreEvent.EventId switch
         {
-            "PHASE_ONE_PERFECT" => true,
-            "PHASE_ONE_GOOD" => true,
             "BANDERILLAS_HIT" => true,
             "BANDERILLAS_KILL_BONUS" => true,
-            "PHASE_TWO_PERFECT" => true,
-            "PHASE_TWO_GOOD" => true,
             "PHASE_TWO_ROUND_WIN" => true,
             "PHASE_TWO_PERFECT_BONUS" => true,
             _ => false
@@ -575,11 +610,20 @@ public class BullfightAudioController : MonoBehaviour
 
     private void PlayCrowdCheer()
     {
-        if (Time.unscaledTime - lastCrowdCheerAt < crowdCheerCooldown)
+        if (Time.unscaledTime - lastCrowdReactionAt < crowdCheerCooldown)
             return;
 
-        lastCrowdCheerAt = Time.unscaledTime;
-        PlayCue(crowdCheerCue, PlaceholderCue.CrowdCheer, null);
+        lastCrowdReactionAt = Time.unscaledTime;
+        PlayCrowdReactionCue(crowdCheerCue, PlaceholderCue.CrowdCheer);
+    }
+
+    private void PlayCrowdDisappointment()
+    {
+        if (Time.unscaledTime - lastCrowdReactionAt < crowdCheerCooldown)
+            return;
+
+        lastCrowdReactionAt = Time.unscaledTime;
+        PlayCrowdReactionCue(crowdDisappointmentCue, PlaceholderCue.CrowdDisappointment);
     }
 
     private void HandleHoldingClothChanged(bool isHolding) => PlayCue(isHolding ? clothRaiseCue : clothLowerCue, isHolding ? PlaceholderCue.ClothRaise : PlaceholderCue.ClothLower, playerAnchor);
@@ -602,16 +646,27 @@ public class BullfightAudioController : MonoBehaviour
         {
             case "Perfect!": PlayCue(timingPerfectCue, PlaceholderCue.TimingPerfect, null); break;
             case "Good": PlayCue(timingGoodCue, PlaceholderCue.TimingGood, null); break;
-            default: PlayCue(timingMissCue, PlaceholderCue.TimingMiss, null); break;
+            default:
+                PlayCue(timingMissCue, PlaceholderCue.TimingMiss, null);
+                if (ShouldPlayCrowdDisappointmentForTimingResult())
+                    PlayCrowdDisappointment();
+                break;
         }
     }
 
     private void HandleBullIdleAmbient()
     {
-        if (IsGameplaySfxBlocked())
+        if (bullIdleSource == null || IsGameplaySfxBlocked())
+        {
+            StopRuntimeSource(bullIdleSource);
             return;
+        }
 
-        if (trackedBullAI == null) return;
+        if (trackedBullAI == null)
+        {
+            StopRuntimeSource(bullIdleSource);
+            return;
+        }
 
         if (trackedBullAI.currentState == BullAI.BullState.Idle ||
             trackedBullAI.currentState == BullAI.BullState.Roaming)
@@ -621,7 +676,7 @@ public class BullfightAudioController : MonoBehaviour
             if (idleTimer <= 0f)
             {
                 AudioCue chosen = Random.value > 0.5f ? bullIdleCueA : bullIdleCueB;
-                PlayCueWithProximity(chosen, PlaceholderCue.BullFatigue, bullAnchor);
+                PlayRuntimeCueWithProximity(bullIdleSource, chosen, PlaceholderCue.BullFatigue, bullAnchor, false);
 
                 idleTimer = Random.Range(idleIntervalRange.x, idleIntervalRange.y);
             }
@@ -629,8 +684,10 @@ public class BullfightAudioController : MonoBehaviour
         else
         {
             idleTimer = 0f;
+            StopRuntimeSource(bullIdleSource);
         }
     }
+
     private void PlayCueWithProximity(AudioCue configuredCue, PlaceholderCue fallbackCue, Transform anchor)
     {
         if (configuredCue == null) return;
@@ -652,6 +709,29 @@ public class BullfightAudioController : MonoBehaviour
         };
 
         PlayCue(boostedCue, fallbackCue, anchor);
+    }
+
+    private void PlayRuntimeCueWithProximity(AudioSource source, AudioCue configuredCue, PlaceholderCue fallbackCue, Transform anchor, bool loop)
+    {
+        if (configuredCue == null)
+            return;
+
+        float distance = 0f;
+        if (playerAnchor != null && anchor != null)
+            distance = Vector3.Distance(playerAnchor.position, anchor.position);
+
+        float t = Mathf.InverseLerp(proximityMaxDistance, proximityMinDistance, distance);
+        float volumeBoost = Mathf.Lerp(0.6f, proximityVolumeMultiplier, t);
+
+        AudioCue boostedCue = new AudioCue
+        {
+            clip = configuredCue.clip,
+            volume = configuredCue.volume * volumeBoost,
+            pitch = Mathf.Lerp(configuredCue.pitch, configuredCue.pitch * 0.9f, t),
+            spatialBlend = configuredCue.spatialBlend
+        };
+
+        PlayRuntimeCue(source, boostedCue, fallbackCue, anchor, loop);
     }
 
     private void PlayRuntimeCue(AudioSource source, AudioCue configuredCue, PlaceholderCue fallbackCue, Transform anchor, bool loop)
@@ -711,8 +791,64 @@ public class BullfightAudioController : MonoBehaviour
 
         activeSfxSources.Clear();
         StopRuntimeSource(bullStateSource);
+        StopRuntimeSource(bullIdleSource);
         StopRuntimeSource(heartbeatLoopSource);
+        StopRuntimeSource(playerBreathLoopSource);
         activeBullStateAudioMode = BullStateAudioMode.None;
+    }
+
+    private bool ShouldPlayCrowdDisappointmentForTimingResult()
+    {
+        if (gameFlow == null)
+            return false;
+
+        if (gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseOne)
+            return true;
+
+        return gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo &&
+               gameFlow.CurrentPhaseTwoState == BullfightGameFlow.PhaseTwoState.RoundWindow;
+    }
+
+    private void PlayCrowdReactionCue(AudioCue configuredCue, PlaceholderCue fallbackCue)
+    {
+        if (configuredCue == null)
+            return;
+
+        if (TryGetCrowdReactionPosition(out Vector3 crowdPosition))
+        {
+            PlayCueAtPosition(configuredCue, fallbackCue, crowdPosition);
+            return;
+        }
+
+        PlayCue(configuredCue, fallbackCue, null);
+    }
+
+    private bool TryGetCrowdReactionPosition(out Vector3 position)
+    {
+        position = transform.position;
+        if (spawnManager == null)
+            return false;
+
+        Vector3 center = spawnManager.ArenaCenter;
+        Vector3 sourceBasis = playerAnchor != null
+            ? playerAnchor.position
+            : bullAnchor != null ? bullAnchor.position : center + Vector3.forward;
+
+        Vector3 horizontalDirection = sourceBasis - center;
+        horizontalDirection.y = 0f;
+        if (horizontalDirection.sqrMagnitude <= 0.0001f)
+        {
+            horizontalDirection = playerAnchor != null ? playerAnchor.forward : transform.forward;
+            horizontalDirection.y = 0f;
+        }
+
+        if (horizontalDirection.sqrMagnitude <= 0.0001f)
+            return false;
+
+        float reactionRadius = Mathf.Max(1f, spawnManager.ArenaRadius + 0.2f);
+        position = center + horizontalDirection.normalized * reactionRadius;
+        position.y = Mathf.Max(center.y + 1.35f, sourceBasis.y + 0.6f);
+        return true;
     }
 
     private void PlayCue(AudioCue configuredCue, PlaceholderCue fallbackCue, Transform anchor)
@@ -739,6 +875,38 @@ public class BullfightAudioController : MonoBehaviour
         source.rolloffMode = AudioRolloffMode.Linear;
         source.minDistance = 1f;
         source.maxDistance = 18f;
+        source.dopplerLevel = 0f;
+        source.Play();
+        Destroy(audioObject, (clip.length / Mathf.Max(0.01f, Mathf.Abs(source.pitch))) + 0.1f);
+    }
+
+    private void PlayCueAtPosition(AudioCue configuredCue, PlaceholderCue fallbackCue, Vector3 worldPosition)
+    {
+        if (IsGameplaySfxBlocked() || configuredCue == null)
+            return;
+
+        AudioClip clip = configuredCue.clip != null ? configuredCue.clip : GetPlaceholderClip(fallbackCue);
+        if (clip == null)
+            return;
+
+        GameObject audioObject = new GameObject("BullfightSfx_" + fallbackCue);
+        audioObject.transform.SetParent(transform, false);
+        audioObject.transform.position = worldPosition;
+        AudioSource source = audioObject.AddComponent<AudioSource>();
+        source.playOnAwake = false;
+        source.clip = clip;
+        ManagedSfxSource managedSource = new ManagedSfxSource
+        {
+            Source = source,
+            BaseVolume = Mathf.Max(0f, configuredCue.volume)
+        };
+        activeSfxSources.Add(managedSource);
+        source.volume = managedSource.BaseVolume * masterVolume;
+        source.pitch = Mathf.Approximately(configuredCue.pitch, 0f) ? 1f : configuredCue.pitch;
+        source.spatialBlend = Mathf.Clamp01(configuredCue.spatialBlend);
+        source.rolloffMode = AudioRolloffMode.Linear;
+        source.minDistance = 1f;
+        source.maxDistance = 24f;
         source.dopplerLevel = 0f;
         source.Play();
         Destroy(audioObject, (clip.length / Mathf.Max(0.01f, Mathf.Abs(source.pitch))) + 0.1f);
@@ -776,6 +944,8 @@ public class BullfightAudioController : MonoBehaviour
             case PlaceholderCue.TimingMiss: return CreateClip("TimingMiss", 0.18f, (i, t, p) => (Square(t, Mathf.Lerp(220f, 150f, p)) * 0.06f + Noise(i * 47) * 0.03f) * Envelope(p, 0.01f, 0.28f));
             case PlaceholderCue.HeartbeatLoop: return CreateClip("HeartbeatLoop", 0.9f, (i, t, p) => (HeartbeatPulse(p, 0.14f, 0.04f, 0.17f) + HeartbeatPulse(p, 0.42f, 0.04f, 0.13f)) * (Sine(t, 72f) * 0.7f + Sine(t, 108f) * 0.3f));
             case PlaceholderCue.CrowdCheer: return CreateClip("CrowdCheer", 0.65f, (i, t, p) => (Noise(i * 59) * 0.05f + Sine(t, Mathf.Lerp(260f, 420f, p)) * 0.03f + Sine(t, Mathf.Lerp(430f, 620f, p)) * 0.02f) * Envelope(p, 0.04f, 0.24f));
+            case PlaceholderCue.CrowdDisappointment: return CreateClip("CrowdDisappointment", 0.72f, (i, t, p) => (Noise(i * 61) * 0.04f + Sine(t, Mathf.Lerp(180f, 120f, p)) * 0.03f + Sine(t, Mathf.Lerp(240f, 165f, p)) * 0.02f) * Envelope(p, 0.05f, 0.3f));
+            case PlaceholderCue.PlayerBreathLoop: return CreateClip("PlayerBreathLoop", 1.15f, (i, t, p) => (Sine(t, Mathf.Lerp(112f, 88f, p)) * 0.03f + Sine(t, Mathf.Lerp(164f, 136f, p)) * 0.015f + Noise(i * 67) * 0.004f) * (0.35f + Mathf.Clamp01(Mathf.Sin(p * Mathf.PI)) * 0.65f));
             default: return null;
         }
     }

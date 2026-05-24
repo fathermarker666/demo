@@ -6,7 +6,6 @@ using CartoonFX;
 public sealed class BullfightActionVfxController : MonoBehaviour
 {
     private const string ResourceRoot = "BullfightVfx/";
-    private const string FlashResource = ResourceRoot + "CFXR Flash";
     private const string BullHitResource = ResourceRoot + "CFXR Hit A (Red)";
     private const string BullBloodResource = ResourceRoot + "CFXR2 Blood (Directional)";
     private const string GroundHitResource = ResourceRoot + "CFXR2 Ground Hit";
@@ -35,12 +34,11 @@ public sealed class BullfightActionVfxController : MonoBehaviour
     [SerializeField] private bool disableJmoLights = true;
 
     [Header("Player Effect Placement")]
-    [SerializeField] private float dashForwardOffset = 0.55f;
-    [SerializeField] private float dashHeightOffset = 0.1f;
-    [SerializeField] private float perfectDodgeForwardOffset = 0.45f;
-    [SerializeField] private float perfectDodgeHeightOffset = 1.1f;
-    [SerializeField] private float throwForwardOffset = 0.08f;
-    [SerializeField] private float throwHeightOffset = 0.03f;
+    [SerializeField] private float dashTrailForwardOffset = 0.4f;
+    [SerializeField] private float dashTrailHeightOffset = 0.08f;
+    [SerializeField] private Vector3 dashTrailEulerOffset = new Vector3(0f, 90f, 0f);
+    [SerializeField] private float playerBloodForwardOffset = 0.18f;
+    [SerializeField] private float playerBloodHeightOffset = 1.05f;
 
     [Header("Bull Effect Placement")]
     [SerializeField] private float bullHitOutwardOffset = 0.08f;
@@ -48,6 +46,8 @@ public sealed class BullfightActionVfxController : MonoBehaviour
     [SerializeField] private float bullGroundImpactForwardOffset = 0.8f;
     [SerializeField] private float bullGroundImpactProbeHeight = 1.8f;
     [SerializeField] private float bullGroundImpactFallbackHeight = 0.04f;
+    [SerializeField] private float perfectDodgeBehindBullOffset = 1.05f;
+    [SerializeField] private float perfectDodgeBullHeightOffset = 0.08f;
 
     [Header("Sword Effect Placement")]
     [SerializeField] private float swordTrailForwardOffset = 0.16f;
@@ -100,12 +100,6 @@ public sealed class BullfightActionVfxController : MonoBehaviour
     {
         if (activeInstance == this)
             activeInstance = null;
-    }
-
-    public static void PlayBanderillasThrowVfx(Transform throwAnchor)
-    {
-        BullfightActionVfxController controller = GetActiveController();
-        controller?.SpawnThrowFlash(throwAnchor);
     }
 
     public static void PlayBullChargeImpactVfx(Vector3 impactSource, Vector3 playerPosition)
@@ -167,9 +161,11 @@ public sealed class BullfightActionVfxController : MonoBehaviour
             if (subscribedPlayerStats != null)
             {
                 subscribedPlayerStats.OnDashPerformed -= HandleDashPerformed;
+                subscribedPlayerStats.OnDamaged -= HandlePlayerDamaged;
             }
 
             playerStats.OnDashPerformed += HandleDashPerformed;
+            playerStats.OnDamaged += HandlePlayerDamaged;
             subscribedPlayerStats = playerStats;
         }
 
@@ -189,6 +185,7 @@ public sealed class BullfightActionVfxController : MonoBehaviour
         if (subscribedPlayerStats != null)
         {
             subscribedPlayerStats.OnDashPerformed -= HandleDashPerformed;
+            subscribedPlayerStats.OnDamaged -= HandlePlayerDamaged;
             subscribedPlayerStats = null;
         }
 
@@ -204,19 +201,25 @@ public sealed class BullfightActionVfxController : MonoBehaviour
         if (playerStats == null || playerStats.IsDead)
             return;
 
-        Vector3 position = playerStats.transform.position + playerStats.transform.forward * dashForwardOffset + Vector3.up * dashHeightOffset;
-        Quaternion rotation = Quaternion.LookRotation(GetHorizontalDirection(playerStats.transform.forward, Vector3.forward), Vector3.up);
-        SpawnDetached(FlashResource, position, rotation);
+        Vector3 forward = GetHorizontalDirection(playerStats.transform.forward, Vector3.forward);
+        Vector3 position = playerStats.transform.position + forward * dashTrailForwardOffset + Vector3.up * dashTrailHeightOffset;
+        Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up) * Quaternion.Euler(dashTrailEulerOffset);
+        SpawnDetached(SwordTrailResource, position, rotation);
     }
 
     private void SpawnPerfectDodgeSuccess()
     {
-        if (playerStats == null || playerStats.IsDead)
+        if (playerStats == null || playerStats.IsDead || bullAI == null)
             return;
 
-        Vector3 forward = GetHorizontalDirection(playerStats.transform.forward, Vector3.forward);
-        Vector3 position = playerStats.transform.position + forward * perfectDodgeForwardOffset + Vector3.up * perfectDodgeHeightOffset;
-        Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
+        Transform bullBackAnchor = GetPreferredBullBackAnchor();
+        if (bullBackAnchor == null)
+            return;
+
+        Vector3 playerToBull = GetHorizontalDirection(bullBackAnchor.position - playerStats.transform.position, bullAI.transform.forward);
+        Vector3 position = bullBackAnchor.position + playerToBull * perfectDodgeBehindBullOffset;
+        position.y = bullBackAnchor.position.y + perfectDodgeBullHeightOffset;
+        Quaternion rotation = Quaternion.LookRotation(playerToBull, Vector3.up);
         SpawnDetached(PerfectDodgeResource, position, rotation);
     }
 
@@ -236,16 +239,15 @@ public sealed class BullfightActionVfxController : MonoBehaviour
         SpawnAttached(BullBloodResource, anchor, position, rotation);
     }
 
-    private void SpawnThrowFlash(Transform throwAnchor)
+    private void HandlePlayerDamaged(float _)
     {
-        Transform anchor = throwAnchor != null ? throwAnchor : FindPlayerAnchor("hand_r");
-        if (anchor == null)
+        if (playerStats == null || playerStats.IsDead || bullAI == null)
             return;
 
-        Vector3 forward = GetHorizontalDirection(anchor.forward, playerStats != null ? playerStats.transform.forward : transform.forward);
-        Vector3 position = anchor.position + forward * throwForwardOffset + Vector3.up * throwHeightOffset;
-        Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
-        SpawnDetached(FlashResource, position, rotation);
+        Vector3 towardBull = GetHorizontalDirection(bullAI.transform.position - playerStats.transform.position, bullAI.transform.forward);
+        Vector3 position = playerStats.transform.position + towardBull * playerBloodForwardOffset + Vector3.up * playerBloodHeightOffset;
+        Quaternion rotation = Quaternion.LookRotation(towardBull, Vector3.up);
+        SpawnDetached(BullBloodResource, position, rotation);
     }
 
     private void SpawnBullGroundImpact(Vector3 impactSource, Vector3 playerPosition)
@@ -388,6 +390,25 @@ public sealed class BullfightActionVfxController : MonoBehaviour
         Transform anchor = cachedBullImpactAnchors[nextBullAnchorIndex % cachedBullImpactAnchors.Count];
         nextBullAnchorIndex++;
         return anchor != null ? anchor : bullAI.transform;
+    }
+
+    private Transform GetPreferredBullBackAnchor()
+    {
+        if (bullAI == null)
+            return null;
+
+        if (cachedBullAnchorRoot != bullAI.transform || cachedBullImpactAnchors.Count == 0)
+            RebuildBullAnchorCache();
+
+        Transform preferred = FindChildRecursive(bullAI.transform, "Spine_04");
+        if (preferred != null)
+            return preferred;
+
+        preferred = FindChildRecursive(bullAI.transform, "Spine_03");
+        if (preferred != null)
+            return preferred;
+
+        return cachedBullImpactAnchors.Count > 0 ? cachedBullImpactAnchors[0] : bullAI.transform;
     }
 
     private Vector3 GetBullOutwardDirection(Transform anchor)
