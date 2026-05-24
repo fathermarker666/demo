@@ -3,7 +3,8 @@ guid: 1941dbedc529c0d4384857a53f91e39b
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - arcadeAccentFont: {fileID: 12800000, guid: c1f498abfc095442893ae2f75d460cdb, type: 3}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

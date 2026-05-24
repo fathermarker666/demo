@@ -1,11 +1,23 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [DefaultExecutionOrder(-250)]
 public partial class BullfightHudController : MonoBehaviour
 {
+    private enum ArcadeAccentSizeTier
+    {
+        Small,
+        Medium,
+        Large,
+        Hero
+    }
+
     private static Font cachedUiFont;
+    [SerializeField] private Font arcadeAccentFont;
     [SerializeField] private string hudCanvasName = "HUD_Canvas";
     [SerializeField] private string legacyHudCanvasName = "P_LPSP_UI_Canvas";
     [SerializeField] private string legacyHudCanvasCloneName = "P_LPSP_UI_Canvas(Clone)";
@@ -1201,6 +1213,89 @@ public partial class BullfightHudController : MonoBehaviour
         }, 18);
 
         return cachedUiFont;
+    }
+
+    private void ApplyArcadeAccentFont(Text text)
+    {
+        if (text == null)
+            return;
+
+        Font accentFont = ResolveArcadeAccentFont();
+        if (accentFont == null)
+            return;
+
+        text.font = accentFont;
+    }
+
+    private void ApplyArcadeAccentStyle(
+        Text text,
+        ArcadeAccentSizeTier sizeTier,
+        bool wrap = false,
+        int? maxOverride = null,
+        int? minOverride = null,
+        float? legacyScaleOverride = null)
+    {
+        if (text == null)
+            return;
+
+        ApplyReadableFallbackStyle(text, text.fontSize, wrap);
+    }
+
+    private void ApplyReadableFallbackStyle(Text text, int fontSize, bool wrap = false)
+    {
+        if (text == null)
+            return;
+
+        text.font = GetUiFont();
+        text.fontSize = fontSize;
+        text.alignByGeometry = false;
+        text.resizeTextForBestFit = false;
+        text.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.supportRichText = false;
+        text.rectTransform.localScale = Vector3.one;
+    }
+
+    private static bool IsLegacyBitmapFont(Font font)
+    {
+        return font != null && font.fontSize == 0;
+    }
+
+    private static float GetArcadeAccentLegacyScale(ArcadeAccentSizeTier sizeTier)
+    {
+        return sizeTier switch
+        {
+            ArcadeAccentSizeTier.Small => 3f,
+            ArcadeAccentSizeTier.Medium => 4.5f,
+            ArcadeAccentSizeTier.Large => 6.5f,
+            ArcadeAccentSizeTier.Hero => 11f,
+            _ => 4.5f
+        };
+    }
+
+    private Font ResolveArcadeAccentFont()
+    {
+        if (arcadeAccentFont != null)
+            return arcadeAccentFont;
+
+#if UNITY_EDITOR
+        arcadeAccentFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Dadako/BitmapFonts/Pixel/Help-outline.fontsettings");
+#endif
+        if (arcadeAccentFont == null)
+        {
+            Font[] loadedFonts = Resources.FindObjectsOfTypeAll<Font>();
+            for (int index = 0; index < loadedFonts.Length; index++)
+            {
+                Font candidate = loadedFonts[index];
+                if (candidate != null && candidate.name == "Help-outline")
+                {
+                    arcadeAccentFont = candidate;
+                    break;
+                }
+            }
+        }
+
+        return arcadeAccentFont;
     }
 
     private static Slider GetOrCloneSlider(RectTransform parent, Slider template, string objectName)

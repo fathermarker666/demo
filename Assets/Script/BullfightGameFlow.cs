@@ -902,7 +902,7 @@ public partial class BullfightGameFlow : MonoBehaviour
             tutorialAttackSuccessCount++;
             if (tutorialAttackSuccessCount >= Mathf.Max(1, tutorialAttackRequiredCount))
             {
-                QueueTutorialState(TutorialState.Rules, tutorialTransitionDelay, "\u57fa\u790e\u64cd\u4f5c\u5b8c\u6210\uff0c\u4e0a\u5834\u524d\u8acb\u5148\u8b80\u5b8c\u6240\u6709\u898f\u5247\u3002");
+                QueueTutorialState(TutorialState.Complete, tutorialTransitionDelay, "\u57fa\u790e\u64cd\u4f5c\u5b8c\u6210\uff0c\u6e96\u5099\u9032\u5165\u6b63\u5f0f\u6230\u9b25\u3002");
                 return;
             }
 
@@ -1290,7 +1290,7 @@ public partial class BullfightGameFlow : MonoBehaviour
             TutorialState.Capa => $"\u5148\u4f7f\u7528 {GetHoldLabel()} \u9032\u5165\u6301\u5e03\uff0c\u518d\u5728 QTE \u74b0\u7e2e\u8fd1\u6642\u6309 {GetSwingLabel()} \uff0c\u4e26\u62ff\u5230 Perfect\u3002",
             TutorialState.Dash => $"\u7576\u725b\u76f4\u885d\u904e\u4f86\u6642\uff0c\u6309 {GetDashLabel()} \u9023\u7e8c\u5b8c\u6210 3 \u6b21\u6210\u529f\u9583\u907f\u3002",
             TutorialState.Attack => $"\u9760\u8fd1\u725b\u5f8c\u6309 {GetAttackLabel()} \u9032\u884c\u653b\u64ca\uff0c\u9023\u7e8c\u5b8c\u6210 3 \u6b21\u6709\u6548\u547d\u4e2d\u3002",
-            TutorialState.Rules => $"\u8acb\u8b80\u5b8c\u4e0b\u65b9\u898f\u5247\uff0c\u4e4b\u5f8c\u6309 {GetAttackLabel()} \u7e7c\u7e8c\u3002",
+            TutorialState.Rules => "\u6e96\u5099\u9032\u5165\u6b63\u5f0f\u6230\u9b25\u3002",
             TutorialState.Complete => "\u5373\u5c07\u9032\u5165\u6b63\u5f0f\u7684\u7b2c\u4e00\u968e\u6bb5\u3002",
             _ => string.Empty
         };
@@ -1312,9 +1312,7 @@ public partial class BullfightGameFlow : MonoBehaviour
             TutorialState.Attack => tutorialAttackPerformed
                 ? "\u6b63\u5728\u78ba\u8a8d\u662f\u5426\u70ba CLEAN \u547d\u4e2d..."
                 : $"{tutorialAttackSuccessCount}/{Mathf.Max(1, tutorialAttackRequiredCount)}",
-            TutorialState.Rules => tutorialStateElapsed < tutorialRulesMinReadDuration
-                ? "\u8acb\u5148\u8b80\u5b8c\u6240\u6709\u898f\u5247"
-                : $"\u6309 {GetAttackLabel()} \u9032\u5165\u6b63\u5f0f\u6230\u9b25",
+            TutorialState.Rules => "\u6e96\u5099\u9032\u5165\u6b63\u5f0f\u6230\u9b25...",
             TutorialState.Complete => "\u9032\u5165\u6b63\u5f0f\u6230\u9b25...",
             _ => string.Empty
         };
@@ -1322,31 +1320,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private string GetTutorialBody()
     {
-        if (tutorialState != TutorialState.Rules)
-            return string.Empty;
-
-        return
-            "\u9b25\u725b\u58eb\u60a8\u597d\uff0c\u6b61\u8fce\u53c3\u52a0\u672c\u6b21\u7684\u9b25\u725b\u7af6\u8cfd\u3002\u9019\u662f\u4e00\u4efd\u6975\u9ad8\u7684\u69ae\u8b7d\uff0c\u60a8\u5c07\u89aa\u8eab\u5c0d\u6c7a\u9019\u982d\u731b\u725b\uff0c\u4e26\u6c7a\u5b9a\u6700\u7d42\u7684\u7d50\u5c40\u3002\u8acb\u52d9\u5fc5\u719f\u8a18\u4ee5\u4e0b\u6240\u6709\u898f\u5247\uff0c\u9019\u5c07\u662f\u60a8\u5728\u5834\u4e0a\u751f\u5b58\u7684\u552f\u4e00\u4f9d\u64da\u3002\n\n" +
-            "\u4e00\u3001\u9b25\u725b\u58eb\u72c0\u614b\u8207\u9650\u5236\n" +
-            "\u9ad4\u529b\u8207\u6688\u7729\uff1a\n" +
-            "\u57f7\u884c\u4efb\u4f55\u6fc0\u70c8\u52d5\u4f5c\uff08\u62ab\u80a9\u3001\u9583\u907f\u3001\u653b\u64ca\uff09\u7686\u6703\u6d88\u8017\u9ad4\u529b\u3002\n" +
-            "\u898f\u5247\uff1a\u82e5\u9ad4\u529b\u6d88\u8017\u5149\u4fbf\u6703\u9032\u5165 2 \u79d2\u6688\u7729\u72c0\u614b\uff0c\u6b64\u671f\u9593\u73a9\u5bb6\u4e0d\u53ef\u88ab\u64cd\u7e31\uff0c\u4e14\u6975\u6613\u53d7\u5230\u653b\u64ca\u3002\n" +
-            "\u6301\u5e03\u72c0\u614b\uff1a\n" +
-            "\u898f\u5247\uff1a\u6301\u5e03\u72c0\u614b\u4e0b\u73a9\u5bb6\u4e0d\u53ef\u79fb\u52d5\u4e5f\u4e0d\u53ef\u653b\u64ca\u3002\n" +
-            "\u88dc\u511f\uff1a\u6b64\u72c0\u614b\u4e0b\u9ad4\u529b\u6062\u5fa9\u901f\u5ea6\u6700\u5feb\uff08\u6bcf\u79d2\u6062\u5fa9 15%\uff09\uff0c\u662f\u6230\u9b25\u4e2d\u552f\u4e00\u7684\u5598\u606f\u6a5f\u6703\u3002\n" +
-            "\u751f\u547d\u503c\uff1a\n" +
-            "\u82e5\u8840\u91cf\u6b78\u96f6\u5247\u76f4\u63a5\u5224\u5b9a\u6b7b\u4ea1\uff08\u89f8\u767c\u60b2\u5287\u7d50\u5c40\uff09\u3002\n\n" +
-            "\u4e8c\u3001\u4ec7\u6068\u8207\u7bc4\u570d\u5224\u5b9a\n" +
-            "\u653b\u64ca\u7bc4\u570d\u898f\u5247\uff1a\n" +
-            "* \u82e5\u73a9\u5bb6\u5728\u725b\u7684\u885d\u92d2\u7db2\u683c\uff08\u5730\u9762\u7d05\u8272\u77e9\u5f62\uff09\u5167\uff0c\u5247\u88ab\u8996\u70ba\u53ef\u653b\u64ca\u5c0d\u8c61\u3002\n" +
-            "\u82e5\u6210\u529f\u9583\u907f\u6216\u9003\u51fa\u8a72\u7bc4\u570d\uff0c\u5247\u725b\u7684\u885d\u92d2\u5c07\u4e0d\u6703\u5c0d\u60a8\u9020\u6210\u50b7\u5bb3\u3002\n" +
-            "\u6012\u6c23\uff1a\n" +
-            "\u9b25\u725b\u53d7\u5230\u50b7\u5bb3\u6216\u88ab\u6311\u91c1\u6703\u589e\u52a0\u6012\u6c23\u3002\u6012\u6c23\u8d8a\u9ad8\uff0c\u725b\u7684\u885d\u92d2\u901f\u5ea6\u8d8a\u5feb\uff08\u6700\u9ad8 1.1x\uff09\uff0c\u4e14\u8f49\u5411\u8207\u653b\u64ca\u983b\u7387\u4e5f\u6703\u96a8\u4e4b\u63d0\u5347\u3002\n\n" +
-            "\u4e09\u3001\u7cbe\u6e96\u5224\u5b9a\u7cfb\u7d71\n" +
-            "\u7576\u9032\u884c\u6301\u5e03 \u6216 \u6700\u7d42\u523a\u6bba \u6642\uff0c\u756b\u9762\u4e0a\u6703\u51fa\u73fe\u7e2e\u5708\u5224\u5b9a\uff1a\n\n" +
-            "Miss (\u7d05\u8272)\uff1a\u5224\u5b9a\u5931\u6557\u3002\u73a9\u5bb6\u53d7\u50b7\u3001\u9ad4\u529b\u7acb\u5373\u6b78\u96f6\u3001\u4e26\u76f4\u63a5\u9032\u5165\u6688\u7729\u72c0\u614b\u3002\n" +
-            "Good (\u6a58\u8272)\uff1a\u5224\u5b9a\u6210\u529f\u3002\u53ef\u8b93\u725b\u505c\u4e0b\u7576\u524d\u7684\u653b\u64ca\uff0c\u96d9\u65b9\u91cd\u65b0\u62c9\u958b\u8ddd\u96e2\u3002\n" +
-            "Perfect (\u7da0\u8272)\uff1a\u5b8c\u7f8e\u5224\u5b9a\u3002\u8b93\u725b\u505c\u6b62\u653b\u64ca\uff0c\u4e14\u73a9\u5bb6\u6703\u7372\u5f97\u9ad4\u529b\u5927\u5e45\u56de\u5347\u8207\u77ed\u66ab\u7684\u79fb\u52d5\u52a0\u901f Buff\u3002";
+        return string.Empty;
     }
 
     private void UpdatePhaseOne()
@@ -2300,22 +2274,22 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private string GetMoveLabel()
     {
-        return playerController != null ? playerController.GetMoveDisplayLabel() : "\u5de6\u6416\u687f";
+        return playerController != null ? playerController.GetMoveDisplayLabel() : "\u5de6\u8611\u83c7\u982d";
     }
 
     private string GetLookLabel()
     {
-        return playerController != null ? playerController.GetLookDisplayLabel() : "\u53f3\u6416\u687f";
+        return playerController != null ? playerController.GetLookDisplayLabel() : "\u53f3\u8611\u83c7\u982d";
     }
 
     private string GetHoldLabel()
     {
-        return playerController != null ? playerController.GetHoldDisplayLabel() : "ZL + ZR";
+        return playerController != null ? playerController.GetHoldDisplayLabel() : "C";
     }
 
     private string GetSwingLabel()
     {
-        return playerController != null ? playerController.GetSwingDisplayLabel() : "X";
+        return playerController != null ? playerController.GetSwingDisplayLabel() : "Space";
     }
 
     private string GetDashLabel()
@@ -2340,12 +2314,22 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private string GetPhaseTwoTutorialInstruction()
     {
-        return "\u5148\u7a69\u5b9a\u6301\u528d\u5b8c\u6210\u6821\u6e96\uff0c\u518d\u6293\u6e96\u6642\u6a5f\u5411\u524d\u523a\u51fa\u3002";
+        if (ShouldShowSensorPhaseTwoPrompt())
+            return "\u5148\u4fdd\u6301\u528d\u4e0d\u52d5\u5b8c\u6210\u6821\u6e96\uff0c\u518d\u4ee5\u63ee\u528d\u8d85\u904e\u529b\u9053\u9580\u6abb\u5411\u524d\u523a\u51fa\u3002";
+
+        return $"\u5148\u6309 {GetPhaseTwoCalibrationLabel()} \u5b8c\u6210\u6821\u6e96\uff0c\u518d\u6309 {GetPhaseTwoStabLabel()} \u5411\u524d\u523a\u51fa\u3002";
     }
 
     private string GetPhaseTwoStandoffInstruction()
     {
-        return "\u7dad\u6301\u5c0d\u5cd9\uff0c\u6293\u6e96\u6642\u6a5f\u523a\u51fa\u6c7a\u5b9a\u6027\u4e00\u64ca\u3002";
+        return ShouldShowSensorPhaseTwoPrompt()
+            ? "\u7dad\u6301\u5c0d\u5cd9\uff0c\u6293\u6e96\u6642\u6a5f\u4ee5\u63ee\u528d\u8d85\u904e\u529b\u9053\u9580\u6abb\u523a\u51fa\u6c7a\u5b9a\u6027\u4e00\u64ca\u3002"
+            : $"\u7dad\u6301\u5c0d\u5cd9\uff0c\u6293\u6e96\u6642\u6a5f\u6309 {GetPhaseTwoStabLabel()} \u523a\u51fa\u6c7a\u5b9a\u6027\u4e00\u64ca\u3002";
+    }
+
+    private bool ShouldShowSensorPhaseTwoPrompt()
+    {
+        return playerController != null && playerController.HasRecentPhaseTwoSensorReading();
     }
 
     private bool IsPhaseTwoSensorActivelyDrivingInput()
@@ -2732,22 +2716,19 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private bool IsEndingSkipKeyboardPressedThisFrame()
     {
-        return endingSkipKey != KeyCode.None && Input.GetKeyDown(endingSkipKey);
+        return (Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame) ||
+               (endingSkipKey != KeyCode.None && Input.GetKeyDown(endingSkipKey));
     }
 
     private static string GetTutorialCompletionSkipInstructionText()
     {
-        return "\u8df3\u904e\u5f71\u7247 / \u6309 Enter \u6216 A";
+        return "\u8df3\u904e\u5f71\u7247 / \u6309 A";
     }
 
     private string GetEndingSkipInstructionText(float threshold, bool canSkip)
     {
         string statusText = canSkip ? "\u53ef\u4ee5\u8df3\u904e\u5f71\u7247" : "\u8df3\u904e\u5f71\u7247";
-        if (endingSkipKey == KeyCode.None)
-            return $"{statusText}\n\u529b\u9053 > {threshold:0}";
-
-        string keyLabel = GetReadableKeyCodeLabel(endingSkipKey);
-        return $"{statusText}\n\u6309 {keyLabel} \u6216\u529b\u9053 > {threshold:0}";
+        return $"{statusText}\n\u6309 A \u6216\u529b\u9053 > {threshold:0}";
     }
 
     private static string GetReadableKeyCodeLabel(KeyCode keyCode)
@@ -3307,6 +3288,9 @@ public partial class BullfightGameFlow : MonoBehaviour
     {
         if (phaseTwoState != PhaseTwoState.Calibration)
             return string.Empty;
+
+        if (!ShouldShowSensorPhaseTwoPrompt())
+            return $"\u8acb\u4ee5 {GetPhaseTwoCalibrationLabel()} \u958b\u59cb\u6821\u6e96\u3002";
 
         if (IsWaitingForSensorCalibrationSignal())
             return "\u7a69\u5b9a\u6301\u528d\uff0c\u6e96\u5099\u958b\u59cb\u6821\u6e96\u3002";

@@ -515,7 +515,7 @@ public partial class BullfightHudController
 
         BullTimingRing timingRing = GetCachedArcadeTimingRing();
         Vector2 anchorPosition = timingRing != null
-            ? timingRing.FeedbackAnchoredPosition + new Vector2(0f, -42f)
+            ? timingRing.FeedbackAnchoredPosition + new Vector2(0f, -58f)
             : new Vector2(0f, 42f);
         arcadeJudgeScoreRoot.anchoredPosition = anchorPosition;
 
@@ -746,7 +746,7 @@ public partial class BullfightHudController
             bool canDismiss = activeArcadeRunSummaryTimer >= 2.5f;
             arcadeFinalResultHint.gameObject.SetActive(true);
             arcadeFinalResultHint.color = textColor;
-            arcadeFinalResultHint.text = canDismiss ? "Click / Enter / A \u7e7c\u7e8c / 30\u79d2\u5f8c\u81ea\u52d5\u95dc\u9589" : "\u7d50\u7b97\u4e2d...";
+            arcadeFinalResultHint.text = canDismiss ? "A \u7e7c\u7e8c / 30\u79d2\u5f8c\u81ea\u52d5\u95dc\u9589" : "\u7d50\u7b97\u4e2d...";
         }
 
         bool dismissRequested = activeArcadeRunSummaryTimer >= 2.5f && WasArcadeConfirmRequestedThisFrame();

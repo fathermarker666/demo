@@ -5,20 +5,34 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [DisallowMultipleComponent]
 [DefaultExecutionOrder(250)]
 public class BullfightPauseSettingsUI : MonoBehaviour
 {
+    private enum ArcadeAccentSizeTier
+    {
+        Small,
+        Medium,
+        Large,
+        Hero
+    }
+
     private const float StickDeadzone = 0.2f;
     private const float VolumeAdjustSpeed = 0.65f;
     private const int CanvasSortingOrder = 6000;
     private const float ResetConfirmationDuration = 4f;
 
     [Header("Overlay")]
+    [SerializeField] private Font arcadeAccentFont;
     [SerializeField] private Sprite controlsOverlaySprite;
 
     [Header("Press Feedback")]
+    [SerializeField] private AudioClip actionClickClip;
+    [SerializeField, Range(0f, 1f)] private float actionClickVolume = 1f;
     [SerializeField, Range(0f, 1f)] private float actionRumbleLowFrequency = 0.35f;
     [SerializeField, Range(0f, 1f)] private float actionRumbleHighFrequency = 0.65f;
     [SerializeField] private float actionRumbleDuration = 0.12f;
@@ -57,6 +71,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private bool resetConfirmationArmed;
     private bool resetInProgress;
     private float resetConfirmationExpireAt = -1f;
+    private AudioSource actionClickAudioSource;
     private Coroutine actionRumbleRoutine;
 
     public static BullfightPauseSettingsUI Instance { get; private set; }
@@ -102,7 +117,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             if (controlsOverlayOpen)
             {
                 CancelResetConfirmation();
-                TriggerActionRumble();
+                TriggerActionFeedback();
                 ToggleControlsOverlay(false);
                 return;
             }
@@ -110,7 +125,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             if (menuOpen)
             {
                 CancelResetConfirmation();
-                TriggerActionRumble();
+                TriggerActionFeedback();
                 CloseMenu();
             }
             else
@@ -130,7 +145,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             if (WasControlsPressedThisFrame())
             {
                 CancelResetConfirmation();
-                TriggerActionRumble();
+                TriggerActionFeedback();
                 ToggleControlsOverlay(false);
             }
 
@@ -139,7 +154,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         if (WasResetPressedThisFrame())
         {
-            TriggerActionRumble();
+            TriggerActionFeedback();
             HandleResetPressed();
             return;
         }
@@ -147,7 +162,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (WasRestartPressedThisFrame())
         {
             CancelResetConfirmation();
-            TriggerActionRumble();
+            TriggerActionFeedback();
             ReturnToStartSelectionMenu();
             return;
         }
@@ -155,7 +170,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (WasControlsPressedThisFrame())
         {
             CancelResetConfirmation();
-            TriggerActionRumble();
+            TriggerActionFeedback();
             ToggleControlsOverlay(true);
             return;
         }
@@ -163,7 +178,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (WasHomePressedThisFrame())
         {
             CancelResetConfirmation();
-            TriggerActionRumble();
+            TriggerActionFeedback();
             EnterHomeMenu();
             return;
         }
@@ -171,7 +186,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (WasResumePressedThisFrame())
         {
             CancelResetConfirmation();
-            TriggerActionRumble();
+            TriggerActionFeedback();
             CloseMenu();
             return;
         }
@@ -226,7 +241,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         toggleHintLabel = CreateText(
             canvasObject.transform,
             "ToggleHint",
-            "ESC / LB 開啟設定",
+            "LB 開啟設定",
             22,
             FontStyle.Bold,
             TextAnchor.MiddleRight,
@@ -243,9 +258,9 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         CreateText(panelRoot.transform, "Title", "SETTING", 44, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0f, 286f), new Vector2(420f, 64f));
 
-        CreateVolumeColumn(panelRoot.transform, "BGM", "BGM", "Left Stick / W,S", new Vector2(-470f, -18f), out bgmFillRect, out bgmValueLabel);
+        CreateVolumeColumn(panelRoot.transform, "BGM", "BGM", "左蘑菇頭", new Vector2(-470f, -18f), out bgmFillRect, out bgmValueLabel);
         CreateActionColumn(panelRoot.transform, new Vector2(0f, -20f));
-        CreateVolumeColumn(panelRoot.transform, "SFX", "SFX", "Right Stick / Up,Down", new Vector2(470f, -18f), out sfxFillRect, out sfxValueLabel);
+        CreateVolumeColumn(panelRoot.transform, "SFX", "SFX", "右蘑菇頭", new Vector2(470f, -18f), out sfxFillRect, out sfxValueLabel);
 
         helpLabel = CreateText(
             panelRoot.transform,
@@ -268,7 +283,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         overlayFrameRect.anchoredPosition = Vector2.zero;
 
         CreateText(overlayFrame.transform, "OverlayTitle", "操作說明", 38, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0f, 342f), new Vector2(520f, 56f));
-        CreateText(overlayFrame.transform, "OverlayHelp", "B / ESC / LB 返回設定", 22, FontStyle.Normal, TextAnchor.MiddleCenter, new Vector2(0f, -356f), new Vector2(420f, 40f));
+        CreateText(overlayFrame.transform, "OverlayHelp", "B 返回設定", 22, FontStyle.Normal, TextAnchor.MiddleCenter, new Vector2(0f, -356f), new Vector2(420f, 40f));
 
         GameObject overlayImageBack = CreatePanel(overlayFrame.transform, "OverlayImageBack", new Color(0.04f, 0.04f, 0.04f, 0.92f), new Vector2(1080f, 620f));
         RectTransform overlayImageBackRect = overlayImageBack.GetComponent<RectTransform>();
@@ -312,7 +327,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         columnRect.anchoredPosition = anchoredPosition;
 
         CreateText(column.transform, "ActionTitle", "MENU", 32, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0f, 210f), new Vector2(280f, 44f));
-        resetActionLabel = CreateActionButtonVisual(column.transform, "ResetAction", "重置遊戲 (R / RB)", new Vector2(0f, 134f));
+        resetActionLabel = CreateActionButtonVisual(column.transform, "ResetAction", "重置遊戲 (RB)", new Vector2(0f, 134f));
         CreateActionButtonVisual(column.transform, "RestartAction", "開始選單 (Y)", new Vector2(0f, 62f));
         CreateActionButtonVisual(column.transform, "ControlsAction", "操作說明 (B)", new Vector2(0f, -10f));
         CreateActionButtonVisual(column.transform, "HomeAction", "回首頁 (X)", new Vector2(0f, -82f));
@@ -412,6 +427,126 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         }, 18);
 
         return cachedFont;
+    }
+
+    private void ApplyArcadeAccentFontIfSafe(Text text, string name, string value)
+    {
+        if (text == null || string.IsNullOrWhiteSpace(value) || !IsAsciiOnly(value))
+            return;
+
+        Font accentFont = ResolveArcadeAccentFont();
+        if (accentFont == null)
+            return;
+
+        text.font = accentFont;
+
+        if (name == "Title" && value == "SETTING")
+        {
+            ApplyArcadeAccentStyle(text, ArcadeAccentSizeTier.Large, 96, 144, 8f);
+            return;
+        }
+
+        if (name == "ActionTitle" || (name.EndsWith("Title", StringComparison.Ordinal) && (value == "MENU" || value == "BGM" || value == "SFX")))
+        {
+            ApplyArcadeAccentStyle(text, ArcadeAccentSizeTier.Large, 96, 104);
+            return;
+        }
+
+        if (name.EndsWith("Value", StringComparison.Ordinal))
+            ApplyArcadeAccentStyle(text, ArcadeAccentSizeTier.Medium, 64, 88);
+    }
+
+    private static void ApplyArcadeAccentStyle(Text text, ArcadeAccentSizeTier sizeTier, int minOverride, int maxOverride, float? legacyScaleOverride = null)
+    {
+        if (text == null)
+            return;
+
+        if (IsLegacyBitmapFont(text.font))
+        {
+            text.resizeTextForBestFit = false;
+            text.fontSize = 16;
+            text.alignByGeometry = true;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.supportRichText = false;
+            text.rectTransform.localScale = Vector3.one * (legacyScaleOverride ?? GetArcadeAccentLegacyScale(sizeTier));
+            return;
+        }
+
+        (int minSize, int maxSize) = sizeTier switch
+        {
+            ArcadeAccentSizeTier.Small => (40, 84),
+            ArcadeAccentSizeTier.Medium => (64, 120),
+            ArcadeAccentSizeTier.Large => (96, 168),
+            ArcadeAccentSizeTier.Hero => (160, 260),
+            _ => (64, 120)
+        };
+
+        minSize = minOverride > 0 ? minOverride : minSize;
+        maxSize = maxOverride > 0 ? maxOverride : maxSize;
+
+        text.resizeTextForBestFit = true;
+        text.resizeTextMinSize = minSize;
+        text.resizeTextMaxSize = Mathf.Max(minSize, maxSize);
+        text.fontSize = text.resizeTextMaxSize;
+        text.alignByGeometry = false;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.supportRichText = false;
+        text.rectTransform.localScale = Vector3.one;
+    }
+
+    private static bool IsLegacyBitmapFont(Font font)
+    {
+        return font != null && font.fontSize == 0;
+    }
+
+    private static float GetArcadeAccentLegacyScale(ArcadeAccentSizeTier sizeTier)
+    {
+        return sizeTier switch
+        {
+            ArcadeAccentSizeTier.Small => 3f,
+            ArcadeAccentSizeTier.Medium => 4.5f,
+            ArcadeAccentSizeTier.Large => 6.5f,
+            ArcadeAccentSizeTier.Hero => 11f,
+            _ => 4.5f
+        };
+    }
+
+    private Font ResolveArcadeAccentFont()
+    {
+        if (arcadeAccentFont != null)
+            return arcadeAccentFont;
+
+#if UNITY_EDITOR
+        arcadeAccentFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Dadako/BitmapFonts/Pixel/Help-outline.fontsettings");
+#endif
+        if (arcadeAccentFont == null)
+        {
+            Font[] loadedFonts = Resources.FindObjectsOfTypeAll<Font>();
+            for (int index = 0; index < loadedFonts.Length; index++)
+            {
+                Font candidate = loadedFonts[index];
+                if (candidate != null && candidate.name == "Help-outline")
+                {
+                    arcadeAccentFont = candidate;
+                    break;
+                }
+            }
+        }
+
+        return arcadeAccentFont;
+    }
+
+    private static bool IsAsciiOnly(string value)
+    {
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (value[index] > 127)
+                return false;
+        }
+
+        return true;
     }
 
     private void ResolveReferencesIfNeeded()
@@ -688,6 +823,26 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         return keyboardValue;
     }
 
+    private void TriggerActionFeedback()
+    {
+        PlayActionClick();
+        TriggerActionRumble();
+    }
+
+    private void PlayActionClick()
+    {
+        ResolveReferencesIfNeeded();
+        MenuUiFeedback.PlayOneShot(this, ref actionClickAudioSource, ResolveActionClickClip(), actionClickVolume);
+    }
+
+    private AudioClip ResolveActionClickClip()
+    {
+        if (actionClickClip != null)
+            return actionClickClip;
+
+        return manualStartMenu != null ? manualStartMenu.DefaultButtonClickClip : null;
+    }
+
     private void TriggerActionRumble()
     {
         TriggerRumble(
@@ -732,7 +887,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private void RefreshLabels()
     {
         if (toggleHintLabel != null)
-            toggleHintLabel.text = "ESC / LB 開啟設定";
+            toggleHintLabel.text = "LB 開啟設定";
 
         if (audioController != null)
         {
@@ -750,14 +905,14 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (helpLabel != null)
         {
             helpLabel.text = controlsOverlayOpen
-                ? "B / ESC / LB 關閉操作說明"
+                ? "B 關閉操作說明"
                 : resetConfirmationArmed
-                    ? "再按一次 R / RB 會完整重載並回到首頁，其他操作會取消重置確認。\nLeft Stick / W,S：BGM   Right Stick / Up,Down：SFX"
-                    : "R / RB：重置遊戲   Y：開始選單   B：操作說明   X：回首頁   A：返回遊戲\nLeft Stick / W,S：BGM   Right Stick / Up,Down：SFX";
+                    ? "再按一次 RB 會完整重載並回到首頁，其他操作會取消重置確認。\n左蘑菇頭：BGM   右蘑菇頭：SFX"
+                    : "RB：重置遊戲   Y：開始選單   B：操作說明   X：回首頁   A：返回遊戲\n左蘑菇頭：BGM   右蘑菇頭：SFX";
         }
 
         if (resetActionLabel != null)
-            resetActionLabel.text = resetConfirmationArmed ? "確認重置 (R / RB)" : "重置遊戲 (R / RB)";
+            resetActionLabel.text = resetConfirmationArmed ? "確認重置 (RB)" : "重置遊戲 (RB)";
 
         if (controlsOverlayImage != null)
         {

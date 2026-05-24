@@ -410,15 +410,15 @@ public class BullfightPlayerController : MonoBehaviour
     public bool IsSensorInputActive() =>
         arduinoTest != null && arduinoTest.ConnectionState == ArduinoTest.SensorConnectionState.Active;
 
-    public string GetMoveDisplayLabel() => "WASD";
+    public string GetMoveDisplayLabel() => "\u5de6\u8611\u83c7\u982d";
 
-    public string GetLookDisplayLabel() => "\u6ed1\u9f20";
+    public string GetLookDisplayLabel() => "\u53f3\u8611\u83c7\u982d";
 
     public string GetHoldDisplayLabel()
     {
         string keyboardLabel = GetReadableKeyboardBindingLabel(holdAction, holdClothKey);
         return IsSensorInputActive()
-            ? $"\u8d85\u97f3\u6ce2\u6301\u5e03 / {keyboardLabel} \u5099\u63f4"
+            ? "\u96d9\u624b\u5f80\u524d\u4f38"
             : keyboardLabel;
     }
 
@@ -426,27 +426,27 @@ public class BullfightPlayerController : MonoBehaviour
     {
         string keyboardLabel = GetReadableKeyboardBindingLabel(swingAction, capaKey);
         return IsSensorInputActive()
-            ? $"\u611f\u6e2c\u5668\u63ee\u5e03 / {keyboardLabel} \u5099\u63f4"
+            ? $"\u96d9\u624b\u5f80\u524d\u4f38\u5f8c\u6309\u4e0b {GetReadableGamepadBindingLabel(swingAction, "X")}"
             : keyboardLabel;
     }
 
-    public string GetDashDisplayLabel() => GetReadableKeyboardBindingLabel(dashAction, evadeKey);
+    public string GetDashDisplayLabel() => GetReadableGamepadBindingLabel(dashAction, "Y");
 
-    public string GetAttackDisplayLabel() => GetReadableKeyboardBindingLabel(attackAction, attackKey);
+    public string GetAttackDisplayLabel() => GetReadableGamepadBindingLabel(attackAction, "B");
 
     public string GetPhaseTwoCalibrationDisplayLabel()
     {
         string keyboardLabel = GetReadableKeyboardBindingLabel(phaseTwoCalibrationAction, phaseTwoCalibrationKey);
-        return IsSensorInputActive()
-            ? $"\u786c\u9ad4\u6301\u528d\u6821\u6e96 / {keyboardLabel} \u5099\u63f4"
+        return HasRecentPhaseTwoSensorReading()
+            ? "\u4fdd\u6301\u528d\u4e0d\u52d5"
             : keyboardLabel;
     }
 
     public string GetPhaseTwoStabDisplayLabel()
     {
         string keyboardLabel = GetReadableKeyboardBindingLabel(phaseTwoStabAction, phaseTwoStabKey);
-        return IsSensorInputActive()
-            ? $"\u786c\u9ad4\u523a\u64ca / {keyboardLabel} \u5099\u63f4"
+        return HasRecentPhaseTwoSensorReading()
+            ? "\u63ee\u528d\u8d85\u904e\u529b\u9053\u9580\u6abb"
             : keyboardLabel;
     }
 

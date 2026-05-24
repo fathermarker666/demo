@@ -2,6 +2,9 @@ using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class BullTimingRing : MonoBehaviour
 {
@@ -28,10 +31,15 @@ public class BullTimingRing : MonoBehaviour
     public Color perfectColor = Color.green;
 
     [Header("UI")]
+    [SerializeField] private Font arcadeAccentFont;
     public TextMeshProUGUI feedbackText;
     public Image ringImage;
     public BullfightPlayerController playerController;
     public BullAI bullAI;
+
+    private const float FeedbackDisplayDuration = 1.5f;
+    private const float FeedbackFadeStartNormalized = 0.45f;
+    private const float LegacyFeedbackBaseScale = 11f;
 
     private float currentProgress;
     private float currentScale;
@@ -49,10 +57,13 @@ public class BullTimingRing : MonoBehaviour
     private Image sourceRingImage;
     private TextMeshProUGUI sourceFeedbackText;
     private Image runtimeRingImage;
-    private TextMeshProUGUI runtimeFeedbackText;
+    private Text runtimeFeedbackLabel;
+    private CanvasGroup runtimeFeedbackCanvasGroup;
+    private Font fallbackUiFont;
     private Sprite fallbackSprite;
     private readonly Vector2 capaScreenOffset = new Vector2(0f, 96f);
     private readonly Vector2 feedbackScreenOffset = new Vector2(0f, 84f);
+    private Vector2 trackedFeedbackAnchor;
 
     public bool IsActive => isActive;
     public bool IsInputArmed => isActive && inputArmed;
@@ -109,12 +120,7 @@ public class BullTimingRing : MonoBehaviour
 
         if (ringImage != null)
             ringImage.enabled = showRing;
-
-        if (feedbackText != null)
-        {
-            feedbackText.text = string.Empty;
-            feedbackText.gameObject.SetActive(false);
-        }
+        ClearFeedbackVisual();
     }
 
     public void SetTelegraphProgress(float progress01)
@@ -137,12 +143,7 @@ public class BullTimingRing : MonoBehaviour
 
         if (ringImage != null)
             ringImage.enabled = false;
-
-        if (feedbackText != null)
-        {
-            feedbackText.text = string.Empty;
-            feedbackText.gameObject.SetActive(false);
-        }
+        ClearFeedbackVisual();
     }
 
     public void HideRingKeepFeedback()
@@ -200,23 +201,26 @@ public class BullTimingRing : MonoBehaviour
 
     public void ShowFeedback(string result)
     {
-        if (feedbackText == null)
+        if (feedbackRect == null && sourceFeedbackText == null)
             return;
 
-        feedbackText.text = result switch
+        string displayText = result switch
         {
             "Perfect!" => "PERFECT",
             "Good" => "GOOD",
             _ => "MISS"
         };
-        feedbackText.color = result switch
+        Color displayColor = result switch
         {
             "Perfect!" => perfectColor,
             "Good" => goodColor,
             _ => missColor
         };
-        feedbackText.gameObject.SetActive(true);
-        feedbackTimer = 1.5f;
+        SetFeedbackText(displayText);
+        SetFeedbackColor(displayColor);
+        SetFeedbackVisible(true);
+        feedbackTimer = FeedbackDisplayDuration;
+        ApplyFeedbackPresentation();
 
         PlayerStats playerStats = bullAI != null ? bullAI.playerStats : null;
         if (playerStats != null)
@@ -287,12 +291,10 @@ public class BullTimingRing : MonoBehaviour
         if (feedbackTimer <= 0f)
             return;
 
-        feedbackTimer -= Time.unscaledDeltaTime;
-        if (feedbackTimer <= 0f && feedbackText != null)
-        {
-            feedbackText.text = string.Empty;
-            feedbackText.gameObject.SetActive(false);
-        }
+        feedbackTimer = Mathf.Max(0f, feedbackTimer - Time.unscaledDeltaTime);
+        ApplyFeedbackPresentation();
+        if (feedbackTimer <= 0f)
+            ClearFeedbackVisual();
     }
 
     private bool HasMissingReferences()
@@ -345,16 +347,11 @@ public class BullTimingRing : MonoBehaviour
             ringRect = sourceRingImage.rectTransform;
         }
 
-        if (runtimeFeedbackText != null)
-        {
-            feedbackText = runtimeFeedbackText;
-            feedbackRect = runtimeFeedbackText.rectTransform;
-        }
-        else if (sourceFeedbackText != null)
-        {
-            feedbackText = sourceFeedbackText;
-            feedbackRect = sourceFeedbackText.rectTransform;
-        }
+        feedbackRect = runtimeFeedbackLabel != null
+            ? runtimeFeedbackLabel.rectTransform
+            : sourceFeedbackText != null
+                ? sourceFeedbackText.rectTransform
+                : null;
 
         if (playerController == null)
             playerController = BullfightSceneCache.FindObject<BullfightPlayerController>();
@@ -368,23 +365,16 @@ public class BullTimingRing : MonoBehaviour
         if (runtimeRingImage != null)
             runtimeRingImage.enabled = false;
 
-        if (runtimeFeedbackText != null)
-            runtimeFeedbackText.gameObject.SetActive(false);
+        if (runtimeFeedbackLabel != null)
+            runtimeFeedbackLabel.gameObject.SetActive(false);
 
         if (sourceRingImage != null)
             sourceRingImage.enabled = false;
 
         if (ringImage != null)
             ringImage.enabled = false;
-
-        if (feedbackText != null)
-        {
-            feedbackTimer = 0f;
-            feedbackText.gameObject.SetActive(false);
-        }
-
-        if (sourceFeedbackText != null)
-            sourceFeedbackText.gameObject.SetActive(false);
+        feedbackTimer = 0f;
+        ClearFeedbackVisual();
     }
 
     private void EnsureOverlayPresentation()
@@ -455,39 +445,58 @@ public class BullTimingRing : MonoBehaviour
             runtimeRingImage.color = missColor;
         }
 
-        if (runtimeFeedbackText == null)
+        if (runtimeFeedbackLabel == null)
         {
-            GameObject textObject = new GameObject("QTE_Feedback", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            GameObject textObject = new GameObject(
+                "QTE_Feedback",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(CanvasGroup),
+                typeof(Text),
+                typeof(Outline),
+                typeof(Shadow));
             RectTransform rect = textObject.GetComponent<RectTransform>();
             rect.SetParent(overlayCanvas.transform, false);
 
-            runtimeFeedbackText = textObject.GetComponent<TextMeshProUGUI>();
-            runtimeFeedbackText.raycastTarget = false;
-            runtimeFeedbackText.text = string.Empty;
-            runtimeFeedbackText.font = sourceFeedbackText != null
-                ? sourceFeedbackText.font
-                : TMPro.TMP_Settings.defaultFontAsset;
-            if (sourceFeedbackText != null && sourceFeedbackText.fontSharedMaterial != null)
-                runtimeFeedbackText.fontSharedMaterial = sourceFeedbackText.fontSharedMaterial;
-            runtimeFeedbackText.fontSize = sourceFeedbackText != null ? sourceFeedbackText.fontSize : 42f;
-            runtimeFeedbackText.alignment = sourceFeedbackText != null ? sourceFeedbackText.alignment : TextAlignmentOptions.Center;
-            runtimeFeedbackText.color = sourceFeedbackText != null ? sourceFeedbackText.color : Color.white;
+            runtimeFeedbackCanvasGroup = textObject.GetComponent<CanvasGroup>();
+            runtimeFeedbackLabel = textObject.GetComponent<Text>();
+            runtimeFeedbackLabel.raycastTarget = false;
+            runtimeFeedbackLabel.text = string.Empty;
+            runtimeFeedbackLabel.font = ResolveArcadeAccentFont();
+            runtimeFeedbackLabel.fontSize = 72;
+            runtimeFeedbackLabel.fontStyle = FontStyle.Bold;
+            runtimeFeedbackLabel.alignment = TextAnchor.MiddleCenter;
+            runtimeFeedbackLabel.alignByGeometry = false;
+            runtimeFeedbackLabel.color = Color.white;
+            runtimeFeedbackLabel.resizeTextForBestFit = true;
+            runtimeFeedbackLabel.resizeTextMinSize = 54;
+            runtimeFeedbackLabel.resizeTextMaxSize = 84;
+            runtimeFeedbackLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            runtimeFeedbackLabel.verticalOverflow = VerticalWrapMode.Overflow;
+            runtimeFeedbackLabel.supportRichText = false;
+
+            Outline outline = textObject.GetComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.96f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            Shadow shadow = textObject.GetComponent<Shadow>();
+            shadow.effectColor = new Color(0.1f, 0.02f, 0.02f, 0.72f);
+            shadow.effectDistance = new Vector2(0f, -5f);
         }
 
         if (sourceRingImage != null && sourceRingImage != runtimeRingImage)
             sourceRingImage.enabled = false;
 
-        if (sourceFeedbackText != null && sourceFeedbackText != runtimeFeedbackText)
+        if (sourceFeedbackText != null)
             sourceFeedbackText.enabled = false;
 
         DisableLegacyWorldSpacePresentation();
 
         ringImage = runtimeRingImage;
         ringRect = runtimeRingImage.rectTransform;
-        feedbackText = runtimeFeedbackText;
-        feedbackRect = runtimeFeedbackText.rectTransform;
+        feedbackRect = runtimeFeedbackLabel.rectTransform;
         runtimeRingImage.transform.SetAsLastSibling();
-        runtimeFeedbackText.transform.SetAsLastSibling();
+        runtimeFeedbackLabel.transform.SetAsLastSibling();
         ConfigureRingRect();
     }
 
@@ -521,21 +530,18 @@ public class BullTimingRing : MonoBehaviour
 
     private void ConfigureFeedbackRect()
     {
-        if (feedbackRect == null || feedbackText == null)
+        if (feedbackRect == null)
             return;
 
         feedbackRect.anchorMin = new Vector2(0.5f, 0.5f);
         feedbackRect.anchorMax = new Vector2(0.5f, 0.5f);
         feedbackRect.pivot = new Vector2(0.5f, 0.5f);
-        feedbackRect.anchoredPosition = feedbackScreenOffset;
+        trackedFeedbackAnchor = feedbackScreenOffset;
+        feedbackRect.anchoredPosition = trackedFeedbackAnchor;
         feedbackRect.sizeDelta = new Vector2(520f, 120f);
-        feedbackRect.localScale = Vector3.one;
+        feedbackRect.localScale = Vector3.one * GetFeedbackBaseScale();
         feedbackRect.localRotation = Quaternion.identity;
-
-        feedbackText.alignment = TextAlignmentOptions.Center;
-        feedbackText.fontSize = Mathf.Max(feedbackText.fontSize, 54f);
-        feedbackText.enableWordWrapping = false;
-        feedbackText.overflowMode = TextOverflowModes.Overflow;
+        ApplyFeedbackPresentation();
     }
 
     private void DisableLegacyWorldSpacePresentation()
@@ -548,7 +554,7 @@ public class BullTimingRing : MonoBehaviour
         if (sourceRingImage != null && sourceRingImage != runtimeRingImage)
             sourceRingImage.enabled = false;
 
-        if (sourceFeedbackText != null && sourceFeedbackText != runtimeFeedbackText)
+        if (sourceFeedbackText != null)
             sourceFeedbackText.enabled = false;
     }
 
@@ -569,15 +575,14 @@ public class BullTimingRing : MonoBehaviour
         {
             sourceFeedbackText.gameObject.SetActive(false);
             sourceFeedbackText.enabled = true;
-            feedbackText = sourceFeedbackText;
             feedbackRect = sourceFeedbackText.rectTransform;
         }
 
         if (runtimeRingImage != null)
             runtimeRingImage.enabled = false;
 
-        if (runtimeFeedbackText != null)
-            runtimeFeedbackText.gameObject.SetActive(false);
+        if (runtimeFeedbackLabel != null)
+            runtimeFeedbackLabel.gameObject.SetActive(false);
     }
 
     private void ConfigurePresentationForMode(TimingMode mode)
@@ -594,7 +599,8 @@ public class BullTimingRing : MonoBehaviour
                 ringRect.anchoredPosition = anchor;
 
             if (feedbackRect != null)
-                feedbackRect.anchoredPosition = feedbackScreenOffset;
+                trackedFeedbackAnchor = feedbackScreenOffset;
+            ApplyFeedbackPresentation();
             return;
         }
 
@@ -605,7 +611,157 @@ public class BullTimingRing : MonoBehaviour
             ringRect.anchoredPosition = Vector2.zero;
 
         if (feedbackRect != null)
-            feedbackRect.anchoredPosition = feedbackScreenOffset;
+            trackedFeedbackAnchor = feedbackScreenOffset;
+        ApplyFeedbackPresentation();
+    }
+
+    private void ClearFeedbackVisual()
+    {
+        feedbackTimer = 0f;
+        SetFeedbackText(string.Empty);
+        SetFeedbackVisible(false);
+        ApplyFeedbackAlpha(1f);
+        if (feedbackRect != null)
+        {
+            feedbackRect.localScale = Vector3.one * GetFeedbackBaseScale();
+            feedbackRect.anchoredPosition = trackedFeedbackAnchor;
+            feedbackRect.localRotation = Quaternion.identity;
+        }
+    }
+
+    private void SetFeedbackText(string value)
+    {
+        if (runtimeFeedbackLabel != null)
+            runtimeFeedbackLabel.text = value ?? string.Empty;
+
+        if (sourceFeedbackText != null)
+            sourceFeedbackText.text = value ?? string.Empty;
+    }
+
+    private void SetFeedbackColor(Color color)
+    {
+        if (runtimeFeedbackLabel != null)
+            runtimeFeedbackLabel.color = new Color(color.r, color.g, color.b, 1f);
+
+        if (sourceFeedbackText != null)
+            sourceFeedbackText.color = color;
+    }
+
+    private void SetFeedbackVisible(bool visible)
+    {
+        if (runtimeFeedbackLabel != null)
+            runtimeFeedbackLabel.gameObject.SetActive(visible);
+
+        if (sourceFeedbackText != null)
+            sourceFeedbackText.gameObject.SetActive(false);
+    }
+
+    private void ApplyFeedbackPresentation()
+    {
+        if (feedbackRect == null)
+            return;
+
+        if (feedbackTimer <= 0f)
+        {
+            feedbackRect.localScale = Vector3.one * GetFeedbackBaseScale();
+            feedbackRect.anchoredPosition = trackedFeedbackAnchor;
+            ApplyFeedbackAlpha(1f);
+            return;
+        }
+
+        float normalized = 1f - Mathf.Clamp01(feedbackTimer / FeedbackDisplayDuration);
+        float intro = Mathf.Clamp01(normalized / 0.22f);
+        float settle = Mathf.Clamp01((normalized - 0.22f) / 0.16f);
+        float scale = normalized < 0.22f
+            ? Mathf.Lerp(0.68f, 1.18f, EaseOutBack(intro))
+            : normalized < 0.38f
+                ? Mathf.Lerp(1.18f, 1f, EaseOutCubic(settle))
+                : 1f;
+        float yOffset = Mathf.Lerp(0f, 20f, EaseOutCubic(Mathf.Clamp01(normalized)));
+        float alpha = normalized < FeedbackFadeStartNormalized
+            ? 1f
+            : 1f - Mathf.Clamp01((normalized - FeedbackFadeStartNormalized) / (1f - FeedbackFadeStartNormalized));
+
+        float baseScale = GetFeedbackBaseScale();
+        feedbackRect.localScale = new Vector3(baseScale * scale, baseScale * scale, 1f);
+        feedbackRect.anchoredPosition = trackedFeedbackAnchor + new Vector2(0f, yOffset);
+        ApplyFeedbackAlpha(alpha);
+    }
+
+    private void ApplyFeedbackAlpha(float alpha)
+    {
+        if (runtimeFeedbackCanvasGroup != null)
+            runtimeFeedbackCanvasGroup.alpha = alpha;
+
+        if (sourceFeedbackText != null)
+        {
+            Color color = sourceFeedbackText.color;
+            color.a = alpha;
+            sourceFeedbackText.color = color;
+        }
+    }
+
+    private float GetFeedbackBaseScale()
+    {
+        return IsLegacyBitmapFont(runtimeFeedbackLabel != null ? runtimeFeedbackLabel.font : null) ? LegacyFeedbackBaseScale : 1f;
+    }
+
+    private Font ResolveArcadeAccentFont()
+    {
+        if (arcadeAccentFont != null && !IsLegacyBitmapFont(arcadeAccentFont))
+            return arcadeAccentFont;
+
+#if UNITY_EDITOR
+        arcadeAccentFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Dadako/BitmapFonts/Pixel/Help-outline.fontsettings");
+#endif
+        if (arcadeAccentFont == null)
+        {
+            Font[] loadedFonts = Resources.FindObjectsOfTypeAll<Font>();
+            for (int index = 0; index < loadedFonts.Length; index++)
+            {
+                Font candidate = loadedFonts[index];
+                if (candidate != null && candidate.name == "Help-outline")
+                {
+                    arcadeAccentFont = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (arcadeAccentFont != null && !IsLegacyBitmapFont(arcadeAccentFont))
+            return arcadeAccentFont;
+
+        if (fallbackUiFont == null)
+        {
+            fallbackUiFont = Font.CreateDynamicFontFromOSFont(new[]
+            {
+                "Microsoft JhengHei UI",
+                "Microsoft JhengHei",
+                "Arial",
+                "Segoe UI"
+            }, 24);
+        }
+
+        return fallbackUiFont;
+    }
+
+    private static bool IsLegacyBitmapFont(Font font)
+    {
+        return font != null && font.fontSize == 0;
+    }
+
+    private static float EaseOutCubic(float value)
+    {
+        value = Mathf.Clamp01(value);
+        return 1f - Mathf.Pow(1f - value, 3f);
+    }
+
+    private static float EaseOutBack(float value)
+    {
+        value = Mathf.Clamp01(value);
+        const float overshoot = 1.70158f;
+        float adjusted = value - 1f;
+        return 1f + ((overshoot + 1f) * adjusted * adjusted * adjusted) + (overshoot * adjusted * adjusted);
     }
 
     private Vector2 GetCapaAnchorPosition()

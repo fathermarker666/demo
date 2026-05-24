@@ -51,6 +51,8 @@ public class ManualStartMenuController : MonoBehaviour
     [SerializeField] private AudioClip quitButtonClickClip;
     [SerializeField] private AudioClip closeControlsButtonClickClip;
     [SerializeField, Range(0f, 1f)] private float homepageClickVolume = 1f;
+    [SerializeField, Range(0f, 1f)] private float homepageSelectionVolume = 0.65f;
+    [SerializeField] private float homepageSelectionSuppressDuration = 0.12f;
     [SerializeField, Range(0f, 1f)] private float homepageRumbleLowFrequency = 0.35f;
     [SerializeField, Range(0f, 1f)] private float homepageRumbleHighFrequency = 0.65f;
     [SerializeField] private float homepageRumbleDuration = 0.12f;
@@ -93,6 +95,8 @@ public class ManualStartMenuController : MonoBehaviour
     private Coroutine gameplayUiRestoreRoutine;
     private Coroutine homepageRumbleRoutine;
     private Coroutine pendingFrontendLandingRoutine;
+    private GameObject lastFrontendSelectedObject;
+    private float suppressHomepageSelectionAudioUntilUnscaledTime = -1f;
     private Image homepageBackgroundImage;
     private Shadow homepageBackgroundShadow;
     private Sprite defaultHomepageBackgroundSprite;
@@ -103,6 +107,13 @@ public class ManualStartMenuController : MonoBehaviour
     private bool homepageBackgroundDefaultsCached;
 
     public bool IsFrontendVisible => IsObjectVisible(startMenuRoot) || IsObjectVisible(controlsPanel);
+    public AudioClip DefaultButtonClickClip => startButtonClickClip != null
+        ? startButtonClickClip
+        : controlsButtonClickClip != null
+            ? controlsButtonClickClip
+            : closeControlsButtonClickClip != null
+                ? closeControlsButtonClickClip
+                : quitButtonClickClip;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetFrontendReloadLandingTarget()
@@ -138,6 +149,7 @@ public class ManualStartMenuController : MonoBehaviour
         bool cancelRequested = WasFrontendCancelRequestedThisFrame();
 
         EnsureFrontendSelection();
+        UpdateFrontendSelectionAudio();
 
         if (cancelRequested && controlsPanel != null && controlsPanel.activeInHierarchy)
         {
@@ -179,7 +191,7 @@ public class ManualStartMenuController : MonoBehaviour
 
         gameFlow?.audioController?.StopAllAudio();
         gameFlow?.SetMainMenuGameplayLocked(true);
-        SelectButton(startButton);
+        SelectButtonSilently(startButton);
     }
 
     public void ReturnToMenu()
@@ -200,6 +212,7 @@ public class ManualStartMenuController : MonoBehaviour
 
         SetCameraState(startMenuCamera, false);
         SetAudioListenerState(startMenuAudioListener, false);
+        ResetHomepageSelectionAudioState();
         ClearSelectedButton();
     }
 
@@ -234,7 +247,7 @@ public class ManualStartMenuController : MonoBehaviour
         if (controlsPanel != null)
             controlsPanel.SetActive(true);
 
-        SelectButton(closeControlsButton);
+        SelectButtonSilently(closeControlsButton);
     }
 
     public void HideControls()
@@ -245,7 +258,7 @@ public class ManualStartMenuController : MonoBehaviour
         if (controlsPanel != null)
             controlsPanel.SetActive(false);
 
-        SelectButton(controlsButton != null ? controlsButton : startButton);
+        SelectButtonSilently(controlsButton != null ? controlsButton : startButton);
     }
 
     public void QuitGame()
@@ -515,12 +528,35 @@ public class ManualStartMenuController : MonoBehaviour
 
     private void PlayHomepageFeedback(AudioClip clip)
     {
+        suppressHomepageSelectionAudioUntilUnscaledTime = Time.unscaledTime + Mathf.Max(0f, homepageSelectionSuppressDuration);
         PlayOneShot(ref homepageFeedbackAudioSource, clip, homepageClickVolume);
         TriggerRumble(
             ref homepageRumbleRoutine,
             homepageRumbleLowFrequency,
             homepageRumbleHighFrequency,
             homepageRumbleDuration);
+    }
+
+    private void UpdateFrontendSelectionAudio()
+    {
+        if (Time.unscaledTime < suppressHomepageSelectionAudioUntilUnscaledTime || EventSystem.current == null)
+            return;
+
+        GameObject currentSelectedObject = EventSystem.current.currentSelectedGameObject;
+        if (!IsValidFrontendSelection(currentSelectedObject))
+        {
+            lastFrontendSelectedObject = null;
+            return;
+        }
+
+        if (currentSelectedObject == lastFrontendSelectedObject)
+            return;
+
+        lastFrontendSelectedObject = currentSelectedObject;
+        PlayOneShot(
+            ref homepageFeedbackAudioSource,
+            GetHomepageSelectionClip(currentSelectedObject),
+            homepageSelectionVolume);
     }
 
     private void PlayOneShot(ref AudioSource audioSource, AudioClip clip, float volume)
@@ -572,6 +608,23 @@ public class ManualStartMenuController : MonoBehaviour
         }
 
         gamepad.ResetHaptics();
+    }
+
+    private AudioClip GetHomepageSelectionClip(GameObject selectedObject)
+    {
+        if (selectedObject == startButton?.gameObject)
+            return startButtonClickClip;
+
+        if (selectedObject == controlsButton?.gameObject)
+            return controlsButtonClickClip;
+
+        if (selectedObject == quitButton?.gameObject)
+            return quitButtonClickClip;
+
+        if (selectedObject == closeControlsButton?.gameObject)
+            return closeControlsButtonClickClip;
+
+        return null;
     }
 
     private void ConfigureMenuNavigation()
@@ -661,6 +714,11 @@ public class ManualStartMenuController : MonoBehaviour
         EventSystem.current.SetSelectedGameObject(null);
     }
 
+    private void ResetHomepageSelectionAudioState()
+    {
+        lastFrontendSelectedObject = null;
+    }
+
     private static void SelectButton(Button button)
     {
         if (button == null || EventSystem.current == null)
@@ -669,6 +727,16 @@ public class ManualStartMenuController : MonoBehaviour
         EventSystem.current.firstSelectedGameObject = button.gameObject;
         EventSystem.current.SetSelectedGameObject(button.gameObject);
         button.Select();
+    }
+
+    private void SelectButtonSilently(Button button)
+    {
+        if (button == null)
+            return;
+
+        suppressHomepageSelectionAudioUntilUnscaledTime = Time.unscaledTime + Mathf.Max(0f, homepageSelectionSuppressDuration);
+        lastFrontendSelectedObject = button.gameObject;
+        SelectButton(button);
     }
 
     private void EnsureFrontendSelection()
@@ -684,7 +752,7 @@ public class ManualStartMenuController : MonoBehaviour
         if (IsValidFrontendSelection(EventSystem.current.currentSelectedGameObject))
             return;
 
-        SelectButton(desiredButton);
+        SelectButtonSilently(desiredButton);
     }
 
     private Button GetDesiredFrontendButton()
