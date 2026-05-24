@@ -45,6 +45,12 @@ public partial class BullfightHudController : MonoBehaviour
     [SerializeField] private string phaseLabelName = "BullfightPhaseLabel";
     [SerializeField] private string phaseAccentName = "BullfightPhaseAccent";
     [SerializeField] private string phaseTwoOverlayRootName = "BullfightPhaseTwoOverlayRoot";
+    [SerializeField] private string phaseTwoPanelName = "BullfightPhaseTwoPanel";
+    [SerializeField] private string phaseTwoAccentBandName = "BullfightPhaseTwoAccentBand";
+    [SerializeField] private string phaseTwoTopBorderName = "BullfightPhaseTwoTopBorder";
+    [SerializeField] private string phaseTwoBottomBorderName = "BullfightPhaseTwoBottomBorder";
+    [SerializeField] private string phaseTwoLeftBorderName = "BullfightPhaseTwoLeftBorder";
+    [SerializeField] private string phaseTwoRightBorderName = "BullfightPhaseTwoRightBorder";
     [SerializeField] private string phaseTwoTitleName = "BullfightPhaseTwoTitle";
     [SerializeField] private string phaseTwoSubtitleName = "BullfightPhaseTwoSubtitle";
     [SerializeField] private string phaseTwoStatusName = "BullfightPhaseTwoStatus";
@@ -134,6 +140,12 @@ public partial class BullfightHudController : MonoBehaviour
     private Text phaseLabel;
     private Image phaseAccent;
     private RectTransform phaseTwoOverlayRoot;
+    private Image phaseTwoPanel;
+    private Image phaseTwoAccentBand;
+    private Image phaseTwoTopBorder;
+    private Image phaseTwoBottomBorder;
+    private Image phaseTwoLeftBorder;
+    private Image phaseTwoRightBorder;
     private Text phaseTwoTitle;
     private Text phaseTwoSubtitle;
     private Text phaseTwoStatus;
@@ -217,6 +229,12 @@ public partial class BullfightHudController : MonoBehaviour
         phaseLabel = null;
         phaseAccent = null;
         phaseTwoOverlayRoot = null;
+        phaseTwoPanel = null;
+        phaseTwoAccentBand = null;
+        phaseTwoTopBorder = null;
+        phaseTwoBottomBorder = null;
+        phaseTwoLeftBorder = null;
+        phaseTwoRightBorder = null;
         phaseTwoTitle = null;
         phaseTwoSubtitle = null;
         phaseTwoStatus = null;
@@ -567,9 +585,23 @@ public partial class BullfightHudController : MonoBehaviour
         phaseTwoOverlayRoot.localScale = Vector3.one;
         phaseTwoOverlayRoot.localRotation = Quaternion.identity;
 
+        phaseTwoPanel = GetOrCreateUiImage(phaseTwoOverlayRoot, phaseTwoPanelName);
+        phaseTwoAccentBand = GetOrCreateUiImage(phaseTwoOverlayRoot, phaseTwoAccentBandName);
+        phaseTwoTopBorder = GetOrCreateUiImage(phaseTwoOverlayRoot, phaseTwoTopBorderName);
+        phaseTwoBottomBorder = GetOrCreateUiImage(phaseTwoOverlayRoot, phaseTwoBottomBorderName);
+        phaseTwoLeftBorder = GetOrCreateUiImage(phaseTwoOverlayRoot, phaseTwoLeftBorderName);
+        phaseTwoRightBorder = GetOrCreateUiImage(phaseTwoOverlayRoot, phaseTwoRightBorderName);
+
+        phaseTwoPanel.transform.SetAsFirstSibling();
+        phaseTwoAccentBand.transform.SetAsLastSibling();
+        phaseTwoOverlayRoot.SetAsLastSibling();
+
         phaseTwoTitle = GetOrCreateUiText(phaseTwoOverlayRoot, phaseTwoTitleName);
         phaseTwoSubtitle = GetOrCreateUiText(phaseTwoOverlayRoot, phaseTwoSubtitleName);
         phaseTwoStatus = GetOrCreateUiText(phaseTwoOverlayRoot, phaseTwoStatusName);
+        phaseTwoTitle.transform.SetAsLastSibling();
+        phaseTwoSubtitle.transform.SetAsLastSibling();
+        phaseTwoStatus.transform.SetAsLastSibling();
 
         if (bullBossRoot != null)
         {
@@ -786,10 +818,53 @@ public partial class BullfightHudController : MonoBehaviour
         if (!shouldShow)
             return;
 
+        ConfigurePhaseTwoPanel();
         GetPhaseTwoOverlayContent(out string titleText, out string subtitleText, out string statusText);
         ConfigureCenteredText(phaseTwoTitle, phaseTwoTitlePosition, phaseTwoTitleFontSize, bullBossTitleColor, FontStyle.Bold, titleText);
         ConfigureCenteredText(phaseTwoSubtitle, phaseTwoSubtitlePosition, phaseTwoSubtitleFontSize, bullBossTitleColor, FontStyle.Normal, subtitleText);
         ConfigureCenteredText(phaseTwoStatus, phaseTwoStatusPosition, phaseTwoStatusFontSize, phaseTwoStatusColor, FontStyle.Italic, statusText);
+    }
+
+    private void ConfigurePhaseTwoPanel()
+    {
+        if (phaseTwoPanel == null ||
+            phaseTwoAccentBand == null ||
+            phaseTwoTopBorder == null ||
+            phaseTwoBottomBorder == null ||
+            phaseTwoLeftBorder == null ||
+            phaseTwoRightBorder == null)
+            return;
+
+        Vector2 panelSize = new Vector2(
+            Mathf.Max(360f, phaseTwoOverlaySize.x - 120f),
+            Mathf.Max(160f, phaseTwoOverlaySize.y - 64f));
+
+        RectTransform panelRect = phaseTwoPanel.rectTransform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.anchoredPosition = Vector2.zero;
+        panelRect.sizeDelta = panelSize;
+        panelRect.localScale = Vector3.one;
+        panelRect.localRotation = Quaternion.identity;
+        phaseTwoPanel.color = new Color(tutorialPanelColor.r, tutorialPanelColor.g, tutorialPanelColor.b, 0.88f);
+        phaseTwoPanel.raycastTarget = false;
+
+        RectTransform accentRect = phaseTwoAccentBand.rectTransform;
+        accentRect.anchorMin = new Vector2(0.5f, 0.5f);
+        accentRect.anchorMax = new Vector2(0.5f, 0.5f);
+        accentRect.pivot = new Vector2(0.5f, 0.5f);
+        accentRect.anchoredPosition = new Vector2(0f, panelSize.y * 0.5f - 22f);
+        accentRect.sizeDelta = new Vector2(panelSize.x - 72f, 24f);
+        accentRect.localScale = Vector3.one;
+        accentRect.localRotation = Quaternion.identity;
+        phaseTwoAccentBand.color = tutorialAccentColor;
+        phaseTwoAccentBand.raycastTarget = false;
+
+        ConfigureTutorialPanelBorder(phaseTwoTopBorder, new Vector2(0f, panelSize.y * 0.5f - 10f), new Vector2(panelSize.x - 26f, 4f));
+        ConfigureTutorialPanelBorder(phaseTwoBottomBorder, new Vector2(0f, -panelSize.y * 0.5f + 10f), new Vector2(panelSize.x - 26f, 4f));
+        ConfigureTutorialPanelBorder(phaseTwoLeftBorder, new Vector2(-panelSize.x * 0.5f + 10f, 0f), new Vector2(4f, panelSize.y - 26f));
+        ConfigureTutorialPanelBorder(phaseTwoRightBorder, new Vector2(panelSize.x * 0.5f - 10f, 0f), new Vector2(4f, panelSize.y - 26f));
     }
 
     private void UpdateBossRoundInfo()

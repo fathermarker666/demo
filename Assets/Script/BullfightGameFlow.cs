@@ -244,6 +244,10 @@ public partial class BullfightGameFlow : MonoBehaviour
     public VideoClip tutorialCompletionVideoClip;
     [Range(0f, 2f)] public float tutorialCompletionVideoVolume = 1f;
 
+    [Header("Phase One To Phase Two Video")]
+    public VideoClip phaseOneToPhaseTwoVideoClip;
+    [Range(0f, 2f)] public float phaseOneToPhaseTwoVideoVolume = 1f;
+
     [Header("Skybox")]
     public Material phaseOneSkybox;
     public Material phaseTwoSkybox;
@@ -457,6 +461,7 @@ public partial class BullfightGameFlow : MonoBehaviour
     private RectTransform tutorialCompletionSkipRoot;
     private Text tutorialCompletionSkipLabel;
     private bool tutorialCompletionVideoPlaybackActive;
+    private bool phaseOneToPhaseTwoVideoPlaybackActive;
     private bool endingVideoPlaybackActive;
     private float endingVideoStartDelayRemaining = -1f;
     private bool tutorialCompletionVideoFreezeStateCaptured;
@@ -525,6 +530,12 @@ public partial class BullfightGameFlow : MonoBehaviour
             return;
         }
 
+        if (phaseOneToPhaseTwoVideoPlaybackActive)
+        {
+            UpdatePhaseOneToPhaseTwoVideoPlayback();
+            return;
+        }
+
         if (currentPhase == GamePhase.PhaseZeroTutorial)
         {
             UpdateTutorial();
@@ -554,7 +565,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
                 if (isEnteringPhaseTwo)
                 {
-                    EnterPhaseTwo();
+                    BeginPhaseTwoEntrySequence();
                     return;
                 }
 
@@ -590,7 +601,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
         if (isEnteringPhaseTwo)
         {
-            EnterPhaseTwo();
+            BeginPhaseTwoEntrySequence();
             return;
         }
 
@@ -987,6 +998,14 @@ public partial class BullfightGameFlow : MonoBehaviour
         EnterPhaseOneFromTutorialImmediate();
     }
 
+    private void BeginPhaseTwoEntrySequence()
+    {
+        if (TryBeginPhaseOneToPhaseTwoVideoPlayback())
+            return;
+
+        EnterPhaseTwo();
+    }
+
     private bool TryBeginTutorialCompletionVideoPlayback()
     {
         if (tutorialCompletionVideoPlaybackActive)
@@ -1010,6 +1029,40 @@ public partial class BullfightGameFlow : MonoBehaviour
         endingVideoPlayer.skipOnDrop = false;
         endingVideoPlayer.clip = tutorialCompletionVideoClip;
         ConfigureVideoAudio(tutorialCompletionVideoClip, tutorialCompletionVideoVolume);
+        audioController?.StopAllAudio();
+
+        if (endingVideoPlayer.gameObject != null)
+            endingVideoPlayer.gameObject.SetActive(true);
+
+        endingVideoPlayer.Stop();
+        endingVideoPlayer.Play();
+        return true;
+    }
+
+    private bool TryBeginPhaseOneToPhaseTwoVideoPlayback()
+    {
+        if (phaseOneToPhaseTwoVideoPlaybackActive)
+            return true;
+
+        if (endingVideoPlayer == null || phaseOneToPhaseTwoVideoClip == null)
+            return false;
+
+        phaseOneToPhaseTwoVideoPlaybackActive = true;
+        LockGameplayForTutorialCompletionVideo();
+        ShowEndingSkipUi(false);
+        EnsureTutorialCompletionSkipUi();
+        ShowTutorialCompletionSkipUi(true);
+
+        endingVideoPlayer.loopPointReached -= HandleEndingVideoCompleted;
+        endingVideoPlayer.loopPointReached -= HandleTutorialCompletionVideoCompleted;
+        endingVideoPlayer.loopPointReached -= HandlePhaseOneToPhaseTwoVideoCompleted;
+        endingVideoPlayer.loopPointReached += HandlePhaseOneToPhaseTwoVideoCompleted;
+        endingVideoPlayer.isLooping = false;
+        endingVideoPlayer.playOnAwake = false;
+        endingVideoPlayer.waitForFirstFrame = true;
+        endingVideoPlayer.skipOnDrop = false;
+        endingVideoPlayer.clip = phaseOneToPhaseTwoVideoClip;
+        ConfigureVideoAudio(phaseOneToPhaseTwoVideoClip, phaseOneToPhaseTwoVideoVolume);
         audioController?.StopAllAudio();
 
         if (endingVideoPlayer.gameObject != null)
@@ -1075,6 +1128,18 @@ public partial class BullfightGameFlow : MonoBehaviour
             FinishTutorialCompletionVideoPlayback();
     }
 
+    private void UpdatePhaseOneToPhaseTwoVideoPlayback()
+    {
+        if (IsTutorialCompletionVideoSkipPressedThisFrame())
+        {
+            SkipPhaseOneToPhaseTwoVideo();
+            return;
+        }
+
+        if (phaseOneToPhaseTwoVideoPlaybackActive && endingVideoPlayer == null)
+            FinishPhaseOneToPhaseTwoVideoPlayback();
+    }
+
     private void SkipTutorialCompletionVideo()
     {
         if (!tutorialCompletionVideoPlaybackActive)
@@ -1083,14 +1148,31 @@ public partial class BullfightGameFlow : MonoBehaviour
         FinishTutorialCompletionVideoPlayback();
     }
 
+    private void SkipPhaseOneToPhaseTwoVideo()
+    {
+        if (!phaseOneToPhaseTwoVideoPlaybackActive)
+            return;
+
+        FinishPhaseOneToPhaseTwoVideoPlayback();
+    }
+
     private void FinishTutorialCompletionVideoPlayback()
     {
         StopTutorialCompletionVideoPlayback();
         EnterPhaseOneFromTutorialImmediate();
     }
 
+    private void FinishPhaseOneToPhaseTwoVideoPlayback()
+    {
+        StopPhaseOneToPhaseTwoVideoPlayback();
+        EnterPhaseTwo();
+    }
+
     private void StopTutorialCompletionVideoPlayback()
     {
+        if (!tutorialCompletionVideoPlaybackActive)
+            return;
+
         tutorialCompletionVideoPlaybackActive = false;
         ShowTutorialCompletionSkipUi(false);
 
@@ -1106,12 +1188,40 @@ public partial class BullfightGameFlow : MonoBehaviour
         RestoreTutorialCompletionVideoFreezeState();
     }
 
+    private void StopPhaseOneToPhaseTwoVideoPlayback()
+    {
+        if (!phaseOneToPhaseTwoVideoPlaybackActive)
+            return;
+
+        phaseOneToPhaseTwoVideoPlaybackActive = false;
+        ShowTutorialCompletionSkipUi(false);
+
+        if (endingVideoPlayer != null)
+        {
+            endingVideoPlayer.loopPointReached -= HandlePhaseOneToPhaseTwoVideoCompleted;
+            endingVideoPlayer.Stop();
+
+            if (endingVideoPlayer.gameObject != null)
+                endingVideoPlayer.gameObject.SetActive(false);
+        }
+
+        RestoreTutorialCompletionVideoFreezeState();
+    }
+
     private void HandleTutorialCompletionVideoCompleted(VideoPlayer source)
     {
         if (source != null)
             source.loopPointReached -= HandleTutorialCompletionVideoCompleted;
 
         FinishTutorialCompletionVideoPlayback();
+    }
+
+    private void HandlePhaseOneToPhaseTwoVideoCompleted(VideoPlayer source)
+    {
+        if (source != null)
+            source.loopPointReached -= HandlePhaseOneToPhaseTwoVideoCompleted;
+
+        FinishPhaseOneToPhaseTwoVideoPlayback();
     }
 
     private void EnterPhaseOneFromTutorialImmediate()
@@ -2111,6 +2221,7 @@ public partial class BullfightGameFlow : MonoBehaviour
     private void ResetState()
     {
         StopTutorialCompletionVideoPlayback();
+        StopPhaseOneToPhaseTwoVideoPlayback();
         StopEndingVideoPlayback();
         ResetArcadeRuntimeState();
         currentPhase = GamePhase.PhaseOne;
@@ -2370,12 +2481,30 @@ public partial class BullfightGameFlow : MonoBehaviour
             return;
         }
 
+        if (phaseOneToPhaseTwoVideoPlaybackActive)
+        {
+            SkipPhaseOneToPhaseTwoVideo();
+            return;
+        }
+
         if (endingVideoPlaybackActive)
             SkipEndingVideo();
     }
 
     private void StopEndingVideoPlayback()
     {
+        if (tutorialCompletionVideoPlaybackActive)
+        {
+            StopTutorialCompletionVideoPlayback();
+            return;
+        }
+
+        if (phaseOneToPhaseTwoVideoPlaybackActive)
+        {
+            StopPhaseOneToPhaseTwoVideoPlayback();
+            return;
+        }
+
         endingVideoPlaybackActive = false;
         endingVideoStartDelayRemaining = -1f;
         ShowEndingSkipUi(false);
