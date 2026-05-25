@@ -46377,12 +46377,12 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 14
+    m_Font: {fileID: 12800000, guid: bdf624ebd8599fc46806c5d3d064bba7, type: 3}
+    m_FontSize: 0
     m_FontStyle: 0
     m_BestFit: 0
-    m_MinSize: 10
-    m_MaxSize: 40
+    m_MinSize: 0
+    m_MaxSize: 136
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -56451,7 +56451,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 048a1004c6c7c17488d3c3fbfe531ce8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  arcadeAccentFont: {fileID: 0}
+  arcadeAccentFont: {fileID: 12800000, guid: bdf624ebd8599fc46806c5d3d064bba7, type: 3}
   controlsOverlaySprite: {fileID: 21300000, guid: 8da5a6e982fb2444cbb2c9cf54d75c2e,
     type: 3}
   actionClickClip: {fileID: 0}
@@ -57023,11 +57023,11 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 14
+    m_Font: {fileID: 12800000, guid: bdf624ebd8599fc46806c5d3d064bba7, type: 3}
+    m_FontSize: 0
     m_FontStyle: 0
     m_BestFit: 0
-    m_MinSize: 10
+    m_MinSize: 0
     m_MaxSize: 40
     m_Alignment: 4
     m_AlignByGeometry: 0
@@ -104001,11 +104001,11 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 14
+    m_Font: {fileID: 12800000, guid: bdf624ebd8599fc46806c5d3d064bba7, type: 3}
+    m_FontSize: 0
     m_FontStyle: 0
     m_BestFit: 0
-    m_MinSize: 10
+    m_MinSize: 0
     m_MaxSize: 40
     m_Alignment: 4
     m_AlignByGeometry: 0
