@@ -726,7 +726,7 @@ public partial class BullfightHudController
         {
             arcadeFinalResultScoreValue.text = FormatArcadeScore(activeArcadeRunSummaryHud.FinalScore);
             arcadeFinalResultScoreValue.color = scoreColor;
-            arcadeFinalResultScoreValue.fontSize = isNumberOneCelebration ? 176 : 162;
+            arcadeFinalResultScoreValue.fontSize = 228;
         }
 
         SetFinalResultRow(0, $"HIGH SCORE      {FormatArcadeScore(activeArcadeRunSummaryHud.NewHighScore)}");
@@ -750,7 +750,7 @@ public partial class BullfightHudController
             arcadeFinalResultHint.gameObject.SetActive(true);
             arcadeFinalResultHint.color = textColor;
             arcadeFinalResultHint.text = canDismiss ? "A \u7e7c\u7e8c / 30\u79d2\u5f8c\u81ea\u52d5\u95dc\u9589" : "\u7d50\u7b97\u4e2d...";
-            ApplyLocalizedUiFont(arcadeFinalResultHint, arcadeFinalResultHint.text, 24, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: 18);
+            ApplyLocalizedUiFont(arcadeFinalResultHint, arcadeFinalResultHint.text, 37, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: 18);
         }
 
         bool dismissRequested = activeArcadeRunSummaryTimer >= 2.5f && WasArcadeConfirmRequestedThisFrame();
@@ -783,7 +783,7 @@ public partial class BullfightHudController
         arcadeScoreRoot.anchorMin = new Vector2(1f, 1f);
         arcadeScoreRoot.anchorMax = new Vector2(1f, 1f);
         arcadeScoreRoot.pivot = new Vector2(1f, 1f);
-        arcadeScoreRoot.anchoredPosition = new Vector2(-40f, -60f);
+        arcadeScoreRoot.anchoredPosition = new Vector2(-40f, -78f);
         arcadeScoreRoot.sizeDelta = new Vector2(430f, 214f);
 
         arcadeScorePanel = GetOrCreateUiImage(arcadeScoreRoot, "Background");
@@ -791,16 +791,16 @@ public partial class BullfightHudController
         arcadeScorePanel.color = new Color(0.12f, 0.04f, 0.04f, 0.86f);
 
         arcadeHighScoreLabel = GetOrCreateUiText(arcadeScoreRoot, "HighScoreLabel");
-        ConfigureArcadeText(arcadeHighScoreLabel, new Vector2(22f, -18f), new Vector2(180f, 24f), TextAnchor.MiddleLeft, 18, bullBossGold, FontStyle.Bold, "HIGH SCORE");
+        ConfigureArcadeText(arcadeHighScoreLabel, new Vector2(22f, -18f), new Vector2(180f, 24f), TextAnchor.MiddleLeft, 19, bullBossGold, FontStyle.Bold, "HIGH SCORE");
 
         arcadeHighScoreValue = GetOrCreateUiText(arcadeScoreRoot, "HighScoreValue");
         ConfigureArcadeText(arcadeHighScoreValue, new Vector2(22f, -42f), new Vector2(280f, 34f), TextAnchor.MiddleLeft, 24, bullBossTitleColor, FontStyle.Bold, FormatArcadeScore(0));
 
         arcadeNewHighScoreBadge = GetOrCreateUiText(arcadeScoreRoot, "NewBadge");
-        ConfigureArcadeText(arcadeNewHighScoreBadge, new Vector2(316f, -28f), new Vector2(88f, 26f), TextAnchor.MiddleLeft, 16, new Color(1f, 0.95f, 0.4f, 1f), FontStyle.Bold, "NEW");
+        ConfigureArcadeText(arcadeNewHighScoreBadge, new Vector2(123.9f, -4.4f), new Vector2(224.3f, 93.1f), TextAnchor.MiddleCenter, 45, new Color(1f, 0.95f, 0.4f, 1f), FontStyle.Bold, "NEW");
 
         arcadeScoreLabel = GetOrCreateUiText(arcadeScoreRoot, "ScoreLabel");
-        ConfigureArcadeText(arcadeScoreLabel, new Vector2(22f, -84f), new Vector2(180f, 24f), TextAnchor.MiddleLeft, 20, bullBossGold, FontStyle.Bold, "SCORE");
+        ConfigureArcadeText(arcadeScoreLabel, new Vector2(22f, -84f), new Vector2(180f, 24f), TextAnchor.MiddleLeft, 23, bullBossGold, FontStyle.Bold, "SCORE");
 
         arcadeScoreValue = GetOrCreateUiText(arcadeScoreRoot, "ScoreValue");
         ConfigureArcadeText(arcadeScoreValue, new Vector2(20f, -108f), new Vector2(372f, 60f), TextAnchor.MiddleLeft, 42, bullBossTitleColor, FontStyle.Bold, FormatArcadeScore(0));
@@ -859,10 +859,10 @@ public partial class BullfightHudController
         ConfigureArcadeText(arcadeComboHeader, new Vector2(0f, -18f), new Vector2(280f, 28f), TextAnchor.MiddleCenter, 22, bullBossGold, FontStyle.Bold, "COMBO");
 
         arcadeComboValue = GetOrCreateUiText(arcadeComboRoot, "Value");
-        ConfigureArcadeText(arcadeComboValue, new Vector2(0f, -54f), new Vector2(330f, 58f), TextAnchor.MiddleCenter, 36, bullBossTitleColor, FontStyle.Bold, "COMBO 1");
+        ConfigureArcadeText(arcadeComboValue, new Vector2(0f, -33.5f), new Vector2(330f, 58f), TextAnchor.MiddleCenter, 54, bullBossTitleColor, FontStyle.Bold, "COMBO 1");
 
         arcadeComboStreak = GetOrCreateUiText(arcadeComboRoot, "Streak");
-        ConfigureArcadeText(arcadeComboStreak, new Vector2(0f, -112f), new Vector2(300f, 28f), TextAnchor.MiddleCenter, 22, bullBossGold, FontStyle.Bold, "x1.00");
+        ConfigureArcadeText(arcadeComboStreak, new Vector2(0f, -106.7f), new Vector2(300f, 28f), TextAnchor.MiddleCenter, 28, bullBossGold, FontStyle.Bold, "x1.00");
 
         arcadeComboRoot.gameObject.SetActive(false);
     }
@@ -979,13 +979,13 @@ public partial class BullfightHudController
             arcadeFinalResultPanel.color = new Color(0.15f, 0.04f, 0.04f, 0.97f);
 
             arcadeFinalResultTitle = GetOrCreateUiText(arcadeFinalResultRoot, "Title");
-            ConfigureArcadeText(arcadeFinalResultTitle, new Vector2(0f, -52f), new Vector2(920f, 56f), TextAnchor.MiddleCenter, 44, bullBossTitleColor, FontStyle.Bold, "ARCADE RESULT");
+            ConfigureArcadeText(arcadeFinalResultTitle, new Vector2(0f, -52f), new Vector2(1031.27f, 171.7f), TextAnchor.MiddleCenter, 95, bullBossTitleColor, FontStyle.Bold, "ARCADE RESULT");
 
             arcadeFinalResultBanner = GetOrCreateUiText(arcadeFinalResultRoot, "Banner");
             ConfigureArcadeText(arcadeFinalResultBanner, new Vector2(0f, -118f), new Vector2(620f, 42f), TextAnchor.MiddleCenter, 34, new Color(1f, 0.95f, 0.4f, 1f), FontStyle.Bold, "NEW RECORD");
 
             arcadeFinalResultScoreValue = GetOrCreateUiText(arcadeFinalResultRoot, "FinalScore");
-            ConfigureArcadeText(arcadeFinalResultScoreValue, new Vector2(0f, -224f), new Vector2(1320f, 196f), TextAnchor.MiddleCenter, 158, bullBossGold, FontStyle.Bold, FormatArcadeScore(0));
+            ConfigureArcadeText(arcadeFinalResultScoreValue, new Vector2(0f, -224f), new Vector2(1436.1f, 239.38f), TextAnchor.MiddleCenter, 228, bullBossGold, FontStyle.Bold, FormatArcadeScore(0));
             Outline finalScoreOutline = arcadeFinalResultScoreValue.GetComponent<Outline>();
             if (finalScoreOutline == null)
                 finalScoreOutline = arcadeFinalResultScoreValue.gameObject.AddComponent<Outline>();
@@ -997,17 +997,18 @@ public partial class BullfightHudController
                 arcadeFinalResultRows[index] = GetOrCreateUiText(arcadeFinalResultRoot, $"Row{index + 1}");
                 ConfigureArcadeText(
                     arcadeFinalResultRows[index],
-                    new Vector2(0f, -502f - (index * 52f)),
+                    new Vector2(194f, -502f - (index * 52f)),
                     new Vector2(920f, 40f),
                     TextAnchor.MiddleCenter,
-                    32,
+                    38,
                     bullBossTitleColor,
                     FontStyle.Bold,
                     string.Empty);
+                arcadeFinalResultRows[index].alignment = TextAnchor.MiddleLeft;
             }
 
             arcadeFinalResultHint = GetOrCreateUiText(arcadeFinalResultRoot, "Hint");
-            ConfigureArcadeText(arcadeFinalResultHint, new Vector2(0f, -796f), new Vector2(720f, 32f), TextAnchor.MiddleCenter, 24, bullBossTitleColor, FontStyle.Italic, "\u7d50\u7b97\u4e2d...");
+            ConfigureArcadeText(arcadeFinalResultHint, new Vector2(0f, -912f), new Vector2(720f, 32f), TextAnchor.MiddleCenter, 37, bullBossTitleColor, FontStyle.Italic, "\u7d50\u7b97\u4e2d...");
             arcadeFinalResultRoot.gameObject.SetActive(false);
         }
 
