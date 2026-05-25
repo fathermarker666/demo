@@ -8,10 +8,6 @@ using UnityEngine.SceneManagement;
 
 public partial class BullfightGameFlow : MonoBehaviour
 {
-    private bool phaseTwoResolveUseOrbit;
-    private float phaseTwoResolveOrbitAngle;
-    private float phaseTwoResolveOrbitRadius = 2.2f;
-    private float phaseTwoResolveOrbitDuration = 1.35f;
     private void CacheDefaultLightingIfNeeded()
     {
         if (lightingDefaultsCached)
@@ -160,30 +156,9 @@ public partial class BullfightGameFlow : MonoBehaviour
         if (audioController != null)
             audioController.PlayPhaseBGM(1);
     }
-    private Material runtimeDefaultSkybox;
-
-    private void CacheDefaultSkyboxIfNeeded()
-    {
-        if (runtimeDefaultSkybox == null)
-            runtimeDefaultSkybox = RenderSettings.skybox;
-    }
-
     private void ApplySkyboxForPhase(GamePhase phase)
     {
-        CacheDefaultSkyboxIfNeeded();
-
-        Material targetSkybox = phase switch
-        {
-            GamePhase.PhaseTwo => phaseTwoSkybox != null ? phaseTwoSkybox : phaseOneSkybox,
-            GamePhase.PhaseOne => phaseOneSkybox != null ? phaseOneSkybox : runtimeDefaultSkybox,
-            _ => phaseOneSkybox != null ? phaseOneSkybox : runtimeDefaultSkybox
-        };
-
-        if (targetSkybox == null || RenderSettings.skybox == targetSkybox)
-            return;
-
-        RenderSettings.skybox = targetSkybox;
-        DynamicGI.UpdateEnvironment();
+        // Skybox now follows the scene Lighting settings instead of runtime overrides.
     }
     public enum TutorialState
     {
@@ -247,10 +222,6 @@ public partial class BullfightGameFlow : MonoBehaviour
     [Header("Phase One To Phase Two Video")]
     public VideoClip phaseOneToPhaseTwoVideoClip;
     [Range(0f, 2f)] public float phaseOneToPhaseTwoVideoVolume = 1f;
-
-    [Header("Skybox")]
-    public Material phaseOneSkybox;
-    public Material phaseTwoSkybox;
 
     [Header("Phase Two")]
     public float phaseTwoTimeScale = 0.75f;
@@ -1664,62 +1635,10 @@ public partial class BullfightGameFlow : MonoBehaviour
             phaseTwoResolveWalkInitialized = true;
             phaseTwoResolveCenterPoint = playerStats.transform.position;
             phaseTwoResolveCenterPoint.y = bullAI.transform.position.y;
-
-            phaseTwoResolveUseOrbit = Random.value < 0.5f;
-            phaseTwoResolveOrbitAngle = 0f;
-
-            if (!phaseTwoResolveUseOrbit)
-            {
-                ResolvePhaseTwoShuttlePoints(phaseTwoResolveCenterPoint);
-                phaseTwoResolveShuttleSegment = 0;
-            }
+            ResolvePhaseTwoShuttlePoints(phaseTwoResolveCenterPoint);
+            phaseTwoResolveShuttleSegment = 0;
 
             bullAI.PlayPhaseTwoWalkLoop();
-        }
-
-        if (phaseTwoResolveUseOrbit)
-        {
-            Vector3 playerCenter = playerStats.transform.position;
-            playerCenter.y = bullAI.transform.position.y;
-
-            phaseTwoResolveCenterPoint = playerCenter;
-
-            float directionSign = phaseTwoRoundSideSign > 0 ? 1f : -1f;
-            phaseTwoResolveOrbitAngle += directionSign * (360f / Mathf.Max(0.1f, phaseTwoResolveOrbitDuration)) * Time.unscaledDeltaTime;
-
-            float radians = phaseTwoResolveOrbitAngle * Mathf.Deg2Rad;
-            Vector3 offset = new Vector3(Mathf.Cos(radians), 0f, Mathf.Sin(radians)) *
-                             Mathf.Max(phaseTwoMinimumPlayerDistance + 0.45f, phaseTwoResolveOrbitRadius);
-
-            Vector3 target = phaseTwoResolveCenterPoint + offset;
-
-            Vector3 current = bullAI.transform.position;
-            Vector3 nextPosition = Vector3.MoveTowards(
-                current,
-                target,
-                Mathf.Max(0.45f, phaseTwoShuttleRunSpeed * 0.65f) * Time.unscaledDeltaTime
-            );
-
-            Vector3 tangent = Vector3.Cross(Vector3.up, (target - phaseTwoResolveCenterPoint).normalized) * directionSign;
-            if (tangent.sqrMagnitude < 0.0001f)
-                tangent = bullAI.transform.forward;
-
-            Quaternion nextRotation = Quaternion.Slerp(
-                bullAI.transform.rotation,
-                Quaternion.LookRotation(tangent.normalized, Vector3.up),
-                6f * Time.unscaledDeltaTime
-            );
-
-            bullAI.SetPhaseTwoPose(nextPosition, nextRotation);
-            bullAI.PlayPhaseTwoWalkLoop();
-
-            if (Mathf.Abs(phaseTwoResolveOrbitAngle) >= 330f)
-            {
-                phaseTwoResolveCompleted = true;
-                bullAI.PlayPhaseTwoRoundResetIdle();
-            }
-
-            return;
         }
 
         Vector3 currentPosition = bullAI.transform.position;
