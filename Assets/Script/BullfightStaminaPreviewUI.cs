@@ -175,7 +175,7 @@ public class BullfightStaminaPreviewUI : MonoBehaviour
 
         if (playerStats.isHoldingCloth)
         {
-            ApplyCapaFillColor();
+            RestoreFillColor();
             SetReadyOutlineVisible(false, Color.clear);
             HideGuide(attackGuideImage, attackGuideLabel);
             HideGuide(dashGuideImage, dashGuideLabel);
