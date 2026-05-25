@@ -59,7 +59,7 @@ public class BullAI : MonoBehaviour
     private bool pendingChargeTimingResolutionActive, pendingChargeTimingPlayerDashed, pendingChargeTimingWasTutorialTiming;
     private string tutorialChargeResult = string.Empty;
     private string pendingChargeTimingResult = string.Empty;
-    private Animator animator; private BullAIAnimationView animationView; private BullAIChargeTelegraphView chargeTelegraphView; private Vector3 chargeStartPosition, chargeDirection = Vector3.forward, roamCenter, roamTarget, circlingCenter, queuedMovePosition; private Quaternion queuedMoveRotation;
+    private Animator animator; private BullAIAnimationView animationView; private BullAIChargeTelegraphView chargeTelegraphView; private BullChargePathFogVfx chargePathFogVfx; private Vector3 chargeStartPosition, chargeDirection = Vector3.forward, roamCenter, roamTarget, circlingCenter, queuedMovePosition; private Quaternion queuedMoveRotation;
     private Rigidbody bullRigidbody; private Collider bullCollider, playerCollider; private BullChargeHitbox chargeHitbox;
     private readonly Collider[] chargeLaneOverlapResults = new Collider[8];
     private readonly Collider[] chargeHitboxOverlapBuffer = new Collider[8];
@@ -122,6 +122,7 @@ public class BullAI : MonoBehaviour
         phaseTwoChargeMotionActive = true;
 
         HideChargeTelegraph();
+        BeginChargePathFogTrail();
     }
 
     private void Awake()
@@ -140,6 +141,7 @@ public class BullAI : MonoBehaviour
         animator = GetComponent<Animator>();
         animationView = new BullAIAnimationView(animator);
         chargeTelegraphView = new BullAIChargeTelegraphView(transform);
+        chargePathFogVfx = GetComponent<BullChargePathFogVfx>() ?? gameObject.AddComponent<BullChargePathFogVfx>();
         bullStats = GetComponent<BullStats>() ?? gameObject.AddComponent<BullStats>();
         ConfigureRigidbody();
         EnsureChargeHitbox();
@@ -207,6 +209,7 @@ public class BullAI : MonoBehaviour
             currentState = BullState.Fatigued;
             ResetChargeQteState();
             HideChargeTelegraph();
+            ForceClearChargePathFogTrail();
             if (timingScript != null)
                 timingScript.HideImmediate();
             UpdateAnimation();
@@ -348,6 +351,7 @@ public class BullAI : MonoBehaviour
     private void UpdateCharge()
     {
         MoveCharge(GetActiveChargeMoveSpeed());
+        SampleChargePathFogTrail();
         if (!dashedThisCharge && playerStats != null && playerStats.LastDashTime >= chargeStartedAt)
             dashedThisCharge = true;
 
@@ -764,7 +768,7 @@ public class BullAI : MonoBehaviour
     private void StartHurtFlinch()
     {
         CancelAutoAttackAndReschedule();
-        currentState = BullState.Hurt; ResetChargeQteState(); pendingCircleReset = false; hasRoamTarget = false; stateTimer = hurtFlinchDuration; attackRecoveryTimer = Mathf.Max(attackRecoveryTimer, 0.45f); HideChargeTelegraph();
+        currentState = BullState.Hurt; ResetChargeQteState(); pendingCircleReset = false; hasRoamTarget = false; stateTimer = hurtFlinchDuration; attackRecoveryTimer = Mathf.Max(attackRecoveryTimer, 0.45f); HideChargeTelegraph(); ForceClearChargePathFogTrail();
         if (timingScript != null) timingScript.HideRingKeepFeedback();
     }
 
@@ -777,6 +781,7 @@ public class BullAI : MonoBehaviour
         pendingCircleReset = false;
         hasRoamTarget = false;
         HideChargeTelegraph();
+        EndChargePathFogTrail();
         if (timingScript != null)
             timingScript.HideRingKeepFeedback();
 
@@ -793,6 +798,7 @@ public class BullAI : MonoBehaviour
         pendingCircleReset = false;
         hasRoamTarget = false;
         HideChargeTelegraph();
+        EndChargePathFogTrail();
         if (timingScript != null)
             timingScript.HideRingKeepFeedback();
 
@@ -813,7 +819,7 @@ public class BullAI : MonoBehaviour
     {
         CompletePendingChargeTimingResolution(false);
         CancelAutoAttackAndReschedule();
-        currentState = BullState.Fatigued; ResetChargeQteState(); pendingCircleReset = circleAfterCharge; hasRoamTarget = false; stateTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.45f : UnityEngine.Random.Range(fatigueDurationRange.x, fatigueDurationRange.y); attackRecoveryTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.3f : GetConsecutiveAttackRecoveryDuration(); HideChargeTelegraph();
+        currentState = BullState.Fatigued; ResetChargeQteState(); pendingCircleReset = circleAfterCharge; hasRoamTarget = false; stateTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.45f : UnityEngine.Random.Range(fatigueDurationRange.x, fatigueDurationRange.y); attackRecoveryTimer = tutorialControlActive && tutorialChargeSequenceActive ? 0.3f : GetConsecutiveAttackRecoveryDuration(); HideChargeTelegraph(); EndChargePathFogTrail();
         if (timingScript != null) timingScript.HideRingKeepFeedback();
     }
 
@@ -824,6 +830,7 @@ public class BullAI : MonoBehaviour
         ResetChargeQteState();
         stateTimer = impactDuration;
         HideChargeTelegraph();
+        EndChargePathFogTrail();
         if (timingScript != null)
             timingScript.HideRingKeepFeedback();
     }
@@ -848,6 +855,7 @@ public class BullAI : MonoBehaviour
         isPlayerInsideChargeLane = IsPlayerInsideActiveChargeLane();
         dashedThisCharge = false;
         HideChargeTelegraph();
+        BeginChargePathFogTrail();
         if (chargeDirection.sqrMagnitude > 0.0001f) QueueMoveRotation(Quaternion.LookRotation(chargeDirection, Vector3.up));
         if (timingScript != null)
         {
@@ -1069,6 +1077,26 @@ public class BullAI : MonoBehaviour
         chargeTelegraphView?.Hide();
     }
 
+    private void BeginChargePathFogTrail()
+    {
+        chargePathFogVfx?.BeginCharge(chargeStartPosition, chargeDirection);
+    }
+
+    private void SampleChargePathFogTrail()
+    {
+        chargePathFogVfx?.SampleCharge(GetCurrentBullPosition(), chargeDirection);
+    }
+
+    private void EndChargePathFogTrail()
+    {
+        chargePathFogVfx?.EndCharge();
+    }
+
+    private void ForceClearChargePathFogTrail()
+    {
+        chargePathFogVfx?.ForceClear();
+    }
+
     private void SnapToGround(bool forceSnap)
     {
         Vector3 currentPosition = GetCurrentBullPosition(), origin = currentPosition + Vector3.up * groundProbeHeight;
@@ -1178,6 +1206,7 @@ public class BullAI : MonoBehaviour
         tutorialChargeUsesTiming = false;
         tutorialChargeResult = string.Empty;
         ClearPendingChargeTimingResolution();
+        ForceClearChargePathFogTrail();
 
         if (active)
             EnterTutorialIdle();
@@ -1199,6 +1228,7 @@ public class BullAI : MonoBehaviour
         ClearAutoAttackState();
         ResetChargeQteState();
         HideChargeTelegraph();
+        ForceClearChargePathFogTrail();
         if (timingScript != null)
         {
             timingScript.HideImmediate();
@@ -1347,7 +1377,7 @@ public class BullAI : MonoBehaviour
 
     public void ResetCombatState()
     {
-        currentState = BullState.Roaming; stateTimer = 0f; ResetChargeQteState(); pendingCircleReset = false; engageTimer = engageDelay; lastHitTime = -999f; chargeStartedAt = -999f; chargeStartPosition = GetCurrentBullPosition(); chargeDirection = transform.forward.sqrMagnitude > 0.0001f ? transform.forward.normalized : Vector3.forward; animationView?.Reset(); roamCenter = GetArenaCenter(); hasRoamTarget = false; attackRecoveryTimer = 1.25f; plannedChargeDistance = 0f; displayedTelegraphTravelDistance = 0f; chargeLaneHalfWidth = 0f; dashedThisCharge = false; currentHorizontalMotion = 0f; phaseTwoChargeMotionActive = false; locomotionBlendTimer = 0f; ClearAutoAttackState(); ScheduleNextAutoAttack(); HideChargeTelegraph();
+        currentState = BullState.Roaming; stateTimer = 0f; ResetChargeQteState(); pendingCircleReset = false; engageTimer = engageDelay; lastHitTime = -999f; chargeStartedAt = -999f; chargeStartPosition = GetCurrentBullPosition(); chargeDirection = transform.forward.sqrMagnitude > 0.0001f ? transform.forward.normalized : Vector3.forward; animationView?.Reset(); roamCenter = GetArenaCenter(); hasRoamTarget = false; attackRecoveryTimer = 1.25f; plannedChargeDistance = 0f; displayedTelegraphTravelDistance = 0f; chargeLaneHalfWidth = 0f; dashedThisCharge = false; currentHorizontalMotion = 0f; phaseTwoChargeMotionActive = false; locomotionBlendTimer = 0f; ClearAutoAttackState(); ScheduleNextAutoAttack(); HideChargeTelegraph(); ForceClearChargePathFogTrail();
         closeRangeImpactConsumedThisAttack = false;
         tutorialChargeDamageEnabled = false;
         tutorialChargeSequenceActive = false;
@@ -1364,7 +1394,7 @@ public class BullAI : MonoBehaviour
 
     private void EnterDeathState()
     {
-        currentState = BullState.Dead; ResetChargeQteState(); pendingCircleReset = false; hasRoamTarget = false; stateTimer = 0f; attackRecoveryTimer = 999f; phaseTwoChargeMotionActive = false; ClearAutoAttackState(); HideChargeTelegraph(); ClearPendingChargeTimingResolution();
+        currentState = BullState.Dead; ResetChargeQteState(); pendingCircleReset = false; hasRoamTarget = false; stateTimer = 0f; attackRecoveryTimer = 999f; phaseTwoChargeMotionActive = false; ClearAutoAttackState(); HideChargeTelegraph(); ClearPendingChargeTimingResolution(); ForceClearChargePathFogTrail();
         if (timingScript != null) timingScript.HideImmediate();
         if (bullRigidbody != null) bullRigidbody.velocity = Vector3.zero;
     }
@@ -2149,6 +2179,7 @@ public class BullAI : MonoBehaviour
     {
         MoveCharge(GetChargeSpeed(), Time.unscaledDeltaTime);
         ClampPhaseTwoChargePositionWithinArena();
+        SampleChargePathFogTrail();
 
         if (!dashedThisCharge && playerStats != null && playerStats.LastDashTime >= chargeStartedAt)
             dashedThisCharge = true;
@@ -2161,6 +2192,7 @@ public class BullAI : MonoBehaviour
         currentState = BullState.Idle;
         stateTimer = 0f;
         HideChargeTelegraph();
+        EndChargePathFogTrail();
     }
 
     private void ClampPhaseTwoChargePositionWithinArena()
