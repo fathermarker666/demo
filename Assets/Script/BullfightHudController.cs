@@ -105,14 +105,14 @@ public partial class BullfightHudController : MonoBehaviour
     [SerializeField] private Vector2 phaseAccentOffset = new Vector2(0f, -36f);
     [SerializeField] private int phaseFontSize = 22;
     [SerializeField] private Vector2 phaseTwoOverlaySize = new Vector2(1080f, 280f);
-    [SerializeField] private Vector2 phaseTwoTitlePosition = new Vector2(0f, 36f);
-    [SerializeField] private Vector2 phaseTwoSubtitlePosition = new Vector2(0f, -12f);
+    [SerializeField] private Vector2 phaseTwoTitlePosition = new Vector2(0f, 44f);
+    [SerializeField] private Vector2 phaseTwoSubtitlePosition = new Vector2(0f, -20f);
     [SerializeField] private Vector2 phaseTwoStatusPosition = new Vector2(0f, -64f);
     [SerializeField] private Vector2 phaseTwoRoundPosition = new Vector2(0f, -74f);
     [SerializeField] private Vector2 phaseTwoScorePosition = new Vector2(0f, -102f);
     [SerializeField] private Vector2 tutorialOverlaySize = new Vector2(1196f, 238f);
     [SerializeField] private Vector2 tutorialRulesOverlaySize = new Vector2(2162f, 1060f);
-    [SerializeField] private Vector2 tutorialTitlePosition = new Vector2(0f, 34f);
+    [SerializeField] private Vector2 tutorialTitlePosition = new Vector2(0f, 44f);
     [SerializeField] private Vector2 tutorialInstructionPosition = new Vector2(0f, -10f);
     [SerializeField] private Vector2 tutorialStatusPosition = new Vector2(0f, -58f);
     [SerializeField] private Vector2 tutorialBodyPosition = new Vector2(0f, -112f);
@@ -769,7 +769,7 @@ public partial class BullfightHudController : MonoBehaviour
 
         ConfigureTitleText(tutorialTitle, titlePosition, tutorialTitleFontSize, bullBossTitleColor, FontStyle.Bold, gameFlow.CurrentTutorialTitle);
         ConfigureCenteredText(tutorialInstruction, instructionPosition, tutorialInstructionFontSize, bullBossTitleColor, FontStyle.Normal, showRules ? string.Empty : gameFlow.CurrentTutorialInstruction);
-        ConfigureCenteredText(tutorialStatus, statusPosition, tutorialStatusFontSize, bullBossGold, FontStyle.Bold, gameFlow.CurrentTutorialStatus);
+        ConfigureCenteredText(tutorialStatus, statusPosition, tutorialStatusFontSize, bullBossGold, FontStyle.Normal, gameFlow.CurrentTutorialStatus);
         ConfigureTutorialBodyText(tutorialBody, tutorialBodyPosition, tutorialBodySize, tutorialBodyFontSize, bullBossTitleColor, showRules ? gameFlow.CurrentTutorialBody : string.Empty, showRules);
     }
 
@@ -877,8 +877,8 @@ public partial class BullfightHudController : MonoBehaviour
         accentRect.anchorMin = new Vector2(0.5f, 0.5f);
         accentRect.anchorMax = new Vector2(0.5f, 0.5f);
         accentRect.pivot = new Vector2(0.5f, 0.5f);
-        accentRect.anchoredPosition = new Vector2(0f, panelSize.y * 0.5f - 22f);
-        accentRect.sizeDelta = new Vector2(panelSize.x - 72f, 24f);
+        accentRect.anchoredPosition = new Vector2(0f, panelSize.y * 0.5f - 54f);
+        accentRect.sizeDelta = new Vector2(panelSize.x - 72f, 41f);
         accentRect.localScale = Vector3.one;
         accentRect.localRotation = Quaternion.identity;
         phaseTwoAccentBand.color = tutorialAccentColor;

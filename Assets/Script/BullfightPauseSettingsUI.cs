@@ -51,6 +51,8 @@ public class BullfightPauseSettingsUI : MonoBehaviour
     private RectTransform sfxFillRect;
     private Text bgmValueLabel;
     private Text sfxValueLabel;
+    private Text bgmHintLabel;
+    private Text sfxHintLabel;
     private Text helpLabel;
     private Text resetActionLabel;
     private Text toggleHintLabel;
@@ -266,10 +268,10 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             panelRoot.transform,
             "Help",
             string.Empty,
-            18,
+            23,
             FontStyle.Normal,
             TextAnchor.MiddleCenter,
-            new Vector2(0f, -294f),
+            new Vector2(0f, -279f),
             new Vector2(820f, 84f));
 
         controlsOverlayRoot = CreatePanel(canvasObject.transform, "ControlsOverlay", new Color(0f, 0f, 0f, 0.82f), Vector2.zero);
@@ -343,7 +345,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = anchoredPosition;
 
-        return CreateText(buttonVisual.transform, name + "Label", label, 28, FontStyle.Bold, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(300f, 48f));
+        return CreateText(buttonVisual.transform, name + "Label", label, 28, FontStyle.Normal, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(300f, 48f));
     }
 
     private void CreateVolumeColumn(Transform parent, string prefix, string title, string stickLabelText, Vector2 anchoredPosition, out RectTransform fillRect, out Text valueLabel)
@@ -376,7 +378,11 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         fillRect.offsetMax = new Vector2(-8f, -8f);
         fillRect.pivot = new Vector2(0.5f, 0f);
 
-        CreateText(column.transform, prefix + "Hint", stickLabelText, 18, FontStyle.Normal, TextAnchor.MiddleCenter, new Vector2(0f, -132f), new Vector2(220f, 54f));
+        Text hintLabel = CreateText(column.transform, prefix + "Hint", stickLabelText, 26, FontStyle.Normal, TextAnchor.MiddleCenter, new Vector2(0f, -132f), new Vector2(220f, 54f));
+        if (string.Equals(prefix, "BGM", StringComparison.Ordinal))
+            bgmHintLabel = hintLabel;
+        else if (string.Equals(prefix, "SFX", StringComparison.Ordinal))
+            sfxHintLabel = hintLabel;
         valueLabel = CreateText(column.transform, prefix + "Value", "100%", 26, FontStyle.Bold, TextAnchor.MiddleCenter, new Vector2(0f, -200f), new Vector2(160f, 40f));
     }
 
@@ -972,17 +978,25 @@ public class BullfightPauseSettingsUI : MonoBehaviour
 
         if (helpLabel != null)
         {
+            helpLabel.fontStyle = FontStyle.Normal;
             helpLabel.text = controlsOverlayOpen
                 ? "B 關閉操作說明"
                 : resetConfirmationArmed
                     ? "再按一次 RB 會完整重載並回到首頁，其他操作會取消重置確認。\n左蘑菇頭：BGM   右蘑菇頭：SFX"
                     : "RB：重置遊戲   Y：開始選單   B：操作說明   X：回首頁   A：返回遊戲\n左蘑菇頭：BGM   右蘑菇頭：SFX";
-            ApplyLocalizedFont(helpLabel, helpLabel.text, 18, wrap: true, VerticalWrapMode.Truncate, 14, 0.94f);
+            RectTransform helpRect = helpLabel.rectTransform;
+            helpRect.anchoredPosition = new Vector2(0f, -279f);
+            helpRect.sizeDelta = new Vector2(820f, 84f);
+            ApplyLocalizedFont(helpLabel, helpLabel.text, 23, wrap: true, VerticalWrapMode.Truncate, 18, 0.94f);
         }
+
+        ApplyActionColumnButtonPresentation();
+        ApplyVolumeHintPresentation();
 
         if (resetActionLabel != null)
         {
             resetActionLabel.text = resetConfirmationArmed ? "確認重置 (RB)" : "重置遊戲 (RB)";
+            resetActionLabel.fontStyle = FontStyle.Normal;
             ApplyLocalizedFont(resetActionLabel, resetActionLabel.text, 28, wrap: true, VerticalWrapMode.Truncate, 20);
         }
 
@@ -996,6 +1010,47 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             controlsOverlayPlaceholderLabel.gameObject.SetActive(controlsOverlaySprite == null);
 
         UpdateClosedHintVisibility();
+    }
+
+    private void ApplyActionColumnButtonPresentation()
+    {
+        ApplyActionButtonLabelPresentation("ResetAction", "ResetActionLabel");
+        ApplyActionButtonLabelPresentation("RestartAction", "RestartActionLabel");
+        ApplyActionButtonLabelPresentation("ControlsAction", "ControlsActionLabel");
+        ApplyActionButtonLabelPresentation("HomeAction", "HomeActionLabel");
+        ApplyActionButtonLabelPresentation("ResumeAction", "ResumeActionLabel");
+    }
+
+    private void ApplyActionButtonLabelPresentation(string actionName, string labelName)
+    {
+        if (panelRoot == null)
+            return;
+
+        Transform labelTransform = panelRoot.transform.Find("ActionColumn/" + actionName + "/" + labelName);
+        if (labelTransform == null)
+            return;
+
+        Text label = labelTransform.GetComponent<Text>();
+        if (label == null)
+            return;
+
+        label.fontStyle = FontStyle.Normal;
+        ApplyLocalizedFont(label, label.text, 28, wrap: true, VerticalWrapMode.Truncate, 20);
+    }
+
+    private void ApplyVolumeHintPresentation()
+    {
+        ApplyVolumeHintLabelPresentation(bgmHintLabel);
+        ApplyVolumeHintLabelPresentation(sfxHintLabel);
+    }
+
+    private static void ApplyVolumeHintLabelPresentation(Text label)
+    {
+        if (label == null)
+            return;
+
+        label.fontStyle = FontStyle.Normal;
+        ApplyLocalizedFont(label, label.text, 26, wrap: true, VerticalWrapMode.Truncate, 18);
     }
 
     private static void ApplyBarLevel(RectTransform rect, float normalized)
