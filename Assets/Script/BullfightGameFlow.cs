@@ -2065,16 +2065,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         Debug.Log("Staff shortcut: daily high score reset.");
     }
 
-    private static bool IsDevelopmentDebugEnvironment()
-    {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        return true;
-#else
-        return false;
-#endif
-    }
-
-    private bool AreDebugShortcutsAvailable() => enableDebugShortcuts && IsDevelopmentDebugEnvironment();
+    private bool AreDebugShortcutsAvailable() => enableDebugShortcuts;
 
     private void SetEnding(EndingType ending)
     {

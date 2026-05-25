@@ -65,6 +65,8 @@ public class BullAI : MonoBehaviour
     private readonly Collider[] chargeHitboxOverlapBuffer = new Collider[8];
     private readonly RaycastHit[] chargeHitboxSweepBuffer = new RaycastHit[8];
     private BullfightGameFlow linkedGameFlow;
+    private BullfightGameFlow.GamePhase lastObservedGamePhase;
+    private bool hasObservedGamePhase;
     private float locomotionBlendTimer = 0f;
     private const float LocomotionHoldTime = 0.12f;
     private const float AnimationMotionThreshold = 0.05f;
@@ -168,6 +170,7 @@ public class BullAI : MonoBehaviour
             ResolveReferencesIfNeeded();
 
         if (player == null || playerStats == null || bullStats == null) return;
+        HandleGamePhaseTransitionIfNeeded();
         if (gameFlow != null && gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseZeroTutorial)
         {
             UpdateTutorialBehavior();
@@ -1095,6 +1098,29 @@ public class BullAI : MonoBehaviour
     private void ForceClearChargePathFogTrail()
     {
         chargePathFogVfx?.ForceClear();
+    }
+
+    private void HandleGamePhaseTransitionIfNeeded()
+    {
+        if (gameFlow == null)
+            return;
+
+        BullfightGameFlow.GamePhase currentGamePhase = gameFlow.currentPhase;
+        bool enteredPhaseTwo = hasObservedGamePhase &&
+                               lastObservedGamePhase != currentGamePhase &&
+                               currentGamePhase == BullfightGameFlow.GamePhase.PhaseTwo;
+
+        if (enteredPhaseTwo)
+        {
+            HideChargeTelegraph();
+            ForceClearChargePathFogTrail();
+
+            if (phaseTwoChargeMotionActive && currentState == BullState.Charging)
+                BeginChargePathFogTrail();
+        }
+
+        lastObservedGamePhase = currentGamePhase;
+        hasObservedGamePhase = true;
     }
 
     private void SnapToGround(bool forceSnap)
