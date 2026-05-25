@@ -11,7 +11,7 @@ public class BullfightStartMenu : MonoBehaviour
 
     [Header("Text")]
     [SerializeField] private string titleText = "西班牙鬥牛";
-    [SerializeField] private string subtitleText = "第一人稱鬥牛體驗";
+    [SerializeField] private string subtitleText = string.Empty;
     [SerializeField] private string startButtonText = "開始遊戲";
     [SerializeField] private string tutorialButtonText = "新手教學";
     [SerializeField] private string hintText = "選擇「開始遊戲」或「新手教學」";
@@ -20,7 +20,7 @@ public class BullfightStartMenu : MonoBehaviour
     [SerializeField] private Vector2 panelSize = new Vector2(760f, 430f);
     [SerializeField] private Vector2 titlePosition = new Vector2(0f, 110f);
     [SerializeField] private Vector2 subtitlePosition = new Vector2(0f, 40f);
-    [SerializeField] private Vector2 hintPosition = new Vector2(0f, -26f);
+    [SerializeField] private Vector2 hintPosition = new Vector2(0f, -2f);
     [SerializeField] private Vector2 buttonCenterPosition = new Vector2(0f, -126f);
     [SerializeField] private Vector2 buttonSize = new Vector2(260f, 72f);
     [SerializeField] private float buttonSpacing = 36f;
@@ -32,9 +32,9 @@ public class BullfightStartMenu : MonoBehaviour
     [SerializeField] private float panelBorderTrim = 26f;
     [SerializeField] private Vector2 accentBandPosition = new Vector2(0f, 82f);
     [SerializeField] private Vector2 accentBandSize = new Vector2(680f, 54f);
-    [SerializeField] private int titleFontSize = 54;
+    [SerializeField] private int titleFontSize = 70;
     [SerializeField] private int subtitleFontSize = 24;
-    [SerializeField] private int hintFontSize = 20;
+    [SerializeField] private int hintFontSize = 34;
     [SerializeField] private int buttonFontSize = 30;
 
     [Header("Colors")]
@@ -252,7 +252,10 @@ public class BullfightStartMenu : MonoBehaviour
         }
 
         if (canvas != null && root != null && startButton != null && tutorialButton != null)
+        {
+            RefreshMenuPresentation();
             return;
+        }
 
         GameObject canvasObject = new GameObject("BullfightStartMenuCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasObject.transform.SetParent(transform, false);
@@ -285,10 +288,11 @@ public class BullfightStartMenu : MonoBehaviour
         CreateImageBand(root.transform, accentBandPosition, accentBandSize, accentColor);
 
         Text title = CreateText("Title", root.transform, titleText, titleFontSize, titleColor, FontStyle.Bold);
-        ConfigureTextRect(title.rectTransform, titlePosition, new Vector2(660f, 84f));
+        ConfigureTextRect(title.rectTransform, titlePosition, new Vector2(660f, 104f));
 
         Text subtitle = CreateText("Subtitle", root.transform, subtitleText, subtitleFontSize, subtitleColor, FontStyle.Normal);
         ConfigureTextRect(subtitle.rectTransform, subtitlePosition, new Vector2(620f, 42f));
+        subtitle.gameObject.SetActive(false);
 
         Text hint = CreateText("Hint", root.transform, hintText, hintFontSize, hintColor, FontStyle.Italic);
         ConfigureTextRect(hint.rectTransform, hintPosition, new Vector2(660f, 50f));
@@ -305,6 +309,8 @@ public class BullfightStartMenu : MonoBehaviour
 
         tutorialButton.onClick.RemoveAllListeners();
         tutorialButton.onClick.AddListener(OnTutorialButtonPressed);
+
+        RefreshMenuPresentation();
     }
 
     private void ShowMenu()
@@ -492,9 +498,81 @@ public class BullfightStartMenu : MonoBehaviour
         colors.selectedColor = colors.highlightedColor;
         button.colors = colors;
 
-        Text buttonLabel = CreateText("ButtonLabel", buttonObject.transform, label, buttonFontSize, buttonTextColor, FontStyle.Bold);
+        Text buttonLabel = CreateText("ButtonLabel", buttonObject.transform, label, buttonFontSize, buttonTextColor, FontStyle.Normal);
         ConfigureTextRect(buttonLabel.rectTransform, Vector2.zero, buttonSize - new Vector2(24f, 12f));
         return button;
+    }
+
+    private void RefreshMenuPresentation()
+    {
+        if (root == null)
+            return;
+
+        RefreshTitlePresentation();
+        RefreshSubtitlePresentation();
+        RefreshHintPresentation();
+        RefreshButtonLabelPresentation(startButton, startButtonText);
+        RefreshButtonLabelPresentation(tutorialButton, tutorialButtonText);
+    }
+
+    private void RefreshTitlePresentation()
+    {
+        Text title = root != null ? root.transform.Find("Title")?.GetComponent<Text>() : null;
+        if (title == null)
+            return;
+
+        title.text = titleText;
+        title.color = titleColor;
+        title.fontStyle = FontStyle.Bold;
+        title.alignment = TextAnchor.MiddleCenter;
+        ConfigureTextRect(title.rectTransform, titlePosition, new Vector2(660f, 104f));
+        ApplyLocalizedFont(title, titleText, titleFontSize, wrap: true, VerticalWrapMode.Truncate);
+        title.gameObject.SetActive(true);
+    }
+
+    private void RefreshSubtitlePresentation()
+    {
+        Text subtitle = root != null ? root.transform.Find("Subtitle")?.GetComponent<Text>() : null;
+        if (subtitle == null)
+            return;
+
+        subtitle.text = subtitleText;
+        subtitle.color = subtitleColor;
+        subtitle.fontStyle = FontStyle.Normal;
+        subtitle.alignment = TextAnchor.MiddleCenter;
+        ConfigureTextRect(subtitle.rectTransform, subtitlePosition, new Vector2(620f, 42f));
+        ApplyLocalizedFont(subtitle, subtitleText, subtitleFontSize, wrap: true, VerticalWrapMode.Truncate);
+        subtitle.gameObject.SetActive(false);
+    }
+
+    private void RefreshHintPresentation()
+    {
+        Text hint = root != null ? root.transform.Find("Hint")?.GetComponent<Text>() : null;
+        if (hint == null)
+            return;
+
+        hint.text = hintText;
+        hint.color = hintColor;
+        hint.fontStyle = FontStyle.Italic;
+        hint.alignment = TextAnchor.MiddleCenter;
+        ConfigureTextRect(hint.rectTransform, hintPosition, new Vector2(660f, 50f));
+        ApplyLocalizedFont(hint, hintText, hintFontSize, wrap: true, VerticalWrapMode.Truncate);
+        hint.gameObject.SetActive(true);
+    }
+
+    private void RefreshButtonLabelPresentation(Button button, string labelText)
+    {
+        Text buttonLabel = button != null ? button.transform.Find("ButtonLabel")?.GetComponent<Text>() : null;
+        if (buttonLabel == null)
+            return;
+
+        buttonLabel.text = labelText;
+        buttonLabel.color = buttonTextColor;
+        buttonLabel.fontStyle = FontStyle.Normal;
+        buttonLabel.alignment = TextAnchor.MiddleCenter;
+        ConfigureTextRect(buttonLabel.rectTransform, Vector2.zero, buttonSize - new Vector2(24f, 12f));
+        ApplyLocalizedFont(buttonLabel, labelText, buttonFontSize, wrap: true, VerticalWrapMode.Truncate);
+        buttonLabel.gameObject.SetActive(true);
     }
 
     private static void ConfigureButtonNavigation(Button button, Button fallback, Selectable selectOnLeft, Selectable selectOnRight)

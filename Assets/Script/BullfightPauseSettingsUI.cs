@@ -243,7 +243,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
             "ToggleHint",
             "LB 開啟設定",
             22,
-            FontStyle.Bold,
+            FontStyle.Normal,
             TextAnchor.MiddleRight,
             Vector2.zero,
             new Vector2(300f, 44f));
@@ -953,6 +953,7 @@ public class BullfightPauseSettingsUI : MonoBehaviour
         if (toggleHintLabel != null)
         {
             toggleHintLabel.text = "LB 開啟設定";
+            toggleHintLabel.fontStyle = FontStyle.Normal;
             ApplyLocalizedFont(toggleHintLabel, toggleHintLabel.text, 22, wrap: true, VerticalWrapMode.Truncate, 16);
         }
 

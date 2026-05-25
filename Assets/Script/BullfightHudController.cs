@@ -497,6 +497,9 @@ public partial class BullfightHudController : MonoBehaviour
         if (slider == null || hudCanvasRect == null)
             return;
 
+        Vector2 resolvedBullHealthBarSize = new Vector2(720f, 60f);
+        Vector2 resolvedBullHealthBarOffset = new Vector2(2.8f, 11.5f);
+
         bullBossRoot = GetOrCreateUiRect(hudCanvasRect, bullBossRootName);
         bullBossRoot.anchorMin = new Vector2(0.5f, 1f);
         bullBossRoot.anchorMax = new Vector2(0.5f, 1f);
@@ -514,8 +517,8 @@ public partial class BullfightHudController : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 1f);
         rect.anchorMax = new Vector2(0.5f, 1f);
         rect.pivot = new Vector2(0.5f, 1f);
-        rect.sizeDelta = bullHealthBarSize;
-        rect.anchoredPosition = bullHealthBarOffset;
+        rect.sizeDelta = resolvedBullHealthBarSize;
+        rect.anchoredPosition = resolvedBullHealthBarOffset;
         rect.localScale = Vector3.one;
         rect.localRotation = Quaternion.identity;
         slider.direction = Slider.Direction.LeftToRight;
@@ -569,9 +572,10 @@ public partial class BullfightHudController : MonoBehaviour
         phaseLabelRect.anchoredPosition = Vector2.zero;
         phaseLabelRect.localScale = Vector3.one;
         phaseLabelRect.localRotation = Quaternion.identity;
+        int resolvedPhaseFontSize = Mathf.Max(24, phaseFontSize);
         phaseLabel.alignment = TextAnchor.UpperRight;
-        phaseLabel.fontSize = phaseFontSize;
-        phaseLabel.fontStyle = FontStyle.Bold;
+        phaseLabel.fontSize = resolvedPhaseFontSize;
+        phaseLabel.fontStyle = FontStyle.Normal;
         phaseLabel.color = phaseTextColor;
 
         phaseAccent = GetOrCreateUiImage(phaseRoot, phaseAccentName);
@@ -710,8 +714,8 @@ public partial class BullfightHudController : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 1f);
         rect.anchorMax = new Vector2(0.5f, 1f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = new Vector2((bullHealthBarSize.x / 6f) * direction, bullHealthBarOffset.y - (bullHealthBarSize.y * 0.5f));
-        rect.sizeDelta = new Vector2(4f, bullHealthBarSize.y + 10f);
+        rect.anchoredPosition = new Vector2((720f / 6f) * direction, 11.5f - (60f * 0.5f));
+        rect.sizeDelta = new Vector2(4f, 70f);
         rect.localScale = Vector3.one;
         rect.localRotation = Quaternion.identity;
         image.color = bullBossTitleColor;
@@ -724,8 +728,10 @@ public partial class BullfightHudController : MonoBehaviour
         if (phaseLabel == null || gameFlow == null)
             return;
 
+        int resolvedPhaseFontSize = Mathf.Max(24, phaseFontSize);
         phaseLabel.text = GetPhaseLabel(gameFlow.currentPhase, gameFlow.currentEnding);
-        ApplyLocalizedUiFont(phaseLabel, phaseLabel.text, phaseFontSize, wrap: false, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, phaseFontSize - 4));
+        phaseLabel.fontStyle = FontStyle.Normal;
+        ApplyLocalizedUiFont(phaseLabel, phaseLabel.text, resolvedPhaseFontSize, wrap: false, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, resolvedPhaseFontSize - 4));
     }
 
     private void UpdatePhaseTwoHud()
@@ -761,7 +767,7 @@ public partial class BullfightHudController : MonoBehaviour
         Vector2 instructionPosition = showRules ? new Vector2(0f, 0f) : tutorialInstructionPosition;
         Vector2 statusPosition = showRules ? new Vector2(0f, -474f) : tutorialStatusPosition;
 
-        ConfigureCenteredText(tutorialTitle, titlePosition, tutorialTitleFontSize, bullBossTitleColor, FontStyle.Bold, gameFlow.CurrentTutorialTitle);
+        ConfigureTitleText(tutorialTitle, titlePosition, tutorialTitleFontSize, bullBossTitleColor, FontStyle.Bold, gameFlow.CurrentTutorialTitle);
         ConfigureCenteredText(tutorialInstruction, instructionPosition, tutorialInstructionFontSize, bullBossTitleColor, FontStyle.Normal, showRules ? string.Empty : gameFlow.CurrentTutorialInstruction);
         ConfigureCenteredText(tutorialStatus, statusPosition, tutorialStatusFontSize, bullBossGold, FontStyle.Bold, gameFlow.CurrentTutorialStatus);
         ConfigureTutorialBodyText(tutorialBody, tutorialBodyPosition, tutorialBodySize, tutorialBodyFontSize, bullBossTitleColor, showRules ? gameFlow.CurrentTutorialBody : string.Empty, showRules);
@@ -837,7 +843,7 @@ public partial class BullfightHudController : MonoBehaviour
 
         ConfigurePhaseTwoPanel();
         GetPhaseTwoOverlayContent(out string titleText, out string subtitleText, out string statusText);
-        ConfigureCenteredText(phaseTwoTitle, phaseTwoTitlePosition, phaseTwoTitleFontSize, bullBossTitleColor, FontStyle.Bold, titleText);
+        ConfigureTitleText(phaseTwoTitle, phaseTwoTitlePosition, phaseTwoTitleFontSize, bullBossTitleColor, FontStyle.Bold, titleText);
         ConfigureCenteredText(phaseTwoSubtitle, phaseTwoSubtitlePosition, phaseTwoSubtitleFontSize, bullBossTitleColor, FontStyle.Normal, subtitleText);
         ConfigureCenteredText(phaseTwoStatus, phaseTwoStatusPosition, phaseTwoStatusFontSize, phaseTwoStatusColor, FontStyle.Italic, statusText);
     }
@@ -1101,6 +1107,34 @@ public partial class BullfightHudController : MonoBehaviour
         text.color = color;
         text.text = value;
         ApplyLocalizedUiFont(text, value, fontSize, wrap: true, VerticalWrapMode.Truncate, minBestFitSize: Mathf.Max(12, fontSize - 8));
+        text.gameObject.SetActive(!string.IsNullOrEmpty(value));
+    }
+
+    private void ConfigureTitleText(Text text, Vector2 anchoredPosition, int fontSize, Color color, FontStyle style, string value)
+    {
+        if (text == null)
+            return;
+
+        RectTransform rect = text.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = new Vector2(980f, Mathf.Max(96f, fontSize * 1.8f));
+        rect.localScale = Vector3.one;
+        rect.localRotation = Quaternion.identity;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.fontSize = fontSize;
+        text.fontStyle = style;
+        text.color = color;
+        text.text = value;
+        ApplyLocalizedUiFont(
+            text,
+            value,
+            fontSize,
+            wrap: false,
+            VerticalWrapMode.Truncate,
+            minBestFitSize: Mathf.Max(18, fontSize - 24));
         text.gameObject.SetActive(!string.IsNullOrEmpty(value));
     }
 

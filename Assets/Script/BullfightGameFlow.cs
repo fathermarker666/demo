@@ -2473,7 +2473,13 @@ public partial class BullfightGameFlow : MonoBehaviour
     private void EnsureEndingSkipUi()
     {
         if (endingSkipRoot != null)
+        {
+            if (endingSkipLabel != null)
+                ConfigureEndingSkipLabelRect(endingSkipLabel.rectTransform);
+            if (endingSkipForceLabel != null)
+                ConfigureEndingSkipForceLabelRect(endingSkipForceLabel.rectTransform);
             return;
+        }
 
         GameObject canvasObject = new GameObject("BullfightEndingSkipCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasObject.transform.SetParent(transform, false);
@@ -2512,16 +2518,13 @@ public partial class BullfightGameFlow : MonoBehaviour
         labelObject.transform.SetParent(rootObject.transform, false);
 
         RectTransform labelRect = labelObject.GetComponent<RectTransform>();
-        labelRect.anchorMin = new Vector2(0f, 0.62f);
-        labelRect.anchorMax = new Vector2(1f, 1f);
-        labelRect.offsetMin = new Vector2(12f, 10f);
-        labelRect.offsetMax = new Vector2(-12f, -6f);
+        ConfigureEndingSkipLabelRect(labelRect);
 
         endingSkipLabel = labelObject.GetComponent<Text>();
         endingSkipLabel.alignment = TextAnchor.MiddleCenter;
         endingSkipLabel.font = GetRuntimeUiFont();
         endingSkipLabel.fontSize = 28;
-        endingSkipLabel.fontStyle = FontStyle.Bold;
+        endingSkipLabel.fontStyle = FontStyle.Normal;
         endingSkipLabel.color = new Color(1f, 0.92f, 0.32f, 1f);
         endingSkipLabel.raycastTarget = false;
         endingSkipLabel.text = GetEndingSkipInstructionText(35f, false);
@@ -2539,16 +2542,13 @@ public partial class BullfightGameFlow : MonoBehaviour
         forceObject.transform.SetParent(rootObject.transform, false);
 
         RectTransform forceRect = forceObject.GetComponent<RectTransform>();
-        forceRect.anchorMin = new Vector2(0f, 0.28f);
-        forceRect.anchorMax = new Vector2(1f, 0.56f);
-        forceRect.offsetMin = new Vector2(10f, 4f);
-        forceRect.offsetMax = new Vector2(-10f, -2f);
+        ConfigureEndingSkipForceLabelRect(forceRect);
 
         endingSkipForceLabel = forceObject.GetComponent<Text>();
         endingSkipForceLabel.alignment = TextAnchor.MiddleCenter;
         endingSkipForceLabel.font = GetRuntimeUiFont();
         endingSkipForceLabel.fontSize = 20;
-        endingSkipForceLabel.fontStyle = FontStyle.Bold;
+        endingSkipForceLabel.fontStyle = FontStyle.Normal;
         endingSkipForceLabel.color = new Color(0.98f, 0.92f, 0.62f, 1f);
         endingSkipForceLabel.raycastTarget = false;
         endingSkipForceLabel.text = "\u529b\u9053 0% / \u9580\u6abb70%";
@@ -2590,6 +2590,34 @@ public partial class BullfightGameFlow : MonoBehaviour
         labelObject.transform.SetAsLastSibling();
 
         ShowEndingSkipUi(false);
+    }
+
+    private static void ConfigureEndingSkipLabelRect(RectTransform labelRect)
+    {
+        if (labelRect == null)
+            return;
+
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.pivot = new Vector2(0.5f, 0.5f);
+        labelRect.offsetMin = new Vector2(12f, 43f);
+        labelRect.offsetMax = new Vector2(-12f, 27f);
+        labelRect.localScale = Vector3.one;
+        labelRect.localRotation = Quaternion.identity;
+    }
+
+    private static void ConfigureEndingSkipForceLabelRect(RectTransform forceRect)
+    {
+        if (forceRect == null)
+            return;
+
+        forceRect.anchorMin = new Vector2(0f, 0.28f);
+        forceRect.anchorMax = new Vector2(1f, 0.56f);
+        forceRect.pivot = new Vector2(0.5f, 0.5f);
+        forceRect.offsetMin = new Vector2(10f, 0f);
+        forceRect.offsetMax = new Vector2(-10f, -6f);
+        forceRect.localScale = Vector3.one;
+        forceRect.localRotation = Quaternion.identity;
     }
 
     private void UpdateEndingSkipUiVisibility()
@@ -2789,7 +2817,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         tutorialCompletionSkipLabel.alignment = TextAnchor.MiddleRight;
         tutorialCompletionSkipLabel.font = GetRuntimeUiFont();
         tutorialCompletionSkipLabel.fontSize = 24;
-        tutorialCompletionSkipLabel.fontStyle = FontStyle.Bold;
+        tutorialCompletionSkipLabel.fontStyle = FontStyle.Normal;
         tutorialCompletionSkipLabel.color = new Color(1f, 0.98f, 0.45f, 1f);
         tutorialCompletionSkipLabel.raycastTarget = false;
         tutorialCompletionSkipLabel.text = GetTutorialCompletionSkipInstructionText();
