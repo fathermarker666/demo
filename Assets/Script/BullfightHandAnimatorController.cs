@@ -450,6 +450,9 @@ public class BullfightHandAnimatorController : MonoBehaviour
         if (playerStats != null && playerStats.IsDead)
             return HandState.Death;
 
+        if (playerStats != null && playerStats.IsBullChargeLocked)
+            return HandState.Idle;
+
         if (transientState.HasValue)
             return transientState.Value;
 
@@ -464,7 +467,7 @@ public class BullfightHandAnimatorController : MonoBehaviour
 
     private bool IsWalking()
     {
-        if (playerStats != null && (playerStats.isHoldingCloth || playerStats.isStunned || playerStats.IsDead))
+        if (playerStats != null && (playerStats.isHoldingCloth || playerStats.isStunned || playerStats.IsBullChargeLocked || playerStats.IsDead))
             return false;
 
         if (gameFlow != null && gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo)

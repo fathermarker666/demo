@@ -37,6 +37,9 @@ public class PlayerStats : MonoBehaviour
     public float banderillasCost = 60f;
     public float stunDuration = 2f;
 
+    [Header("Bull Charge Lock")]
+    [SerializeField] private float bullChargeLockReleaseDelay = 1f;
+
     [Header("Dash")]
     public float dashDistance = 2.25f;
     public float dashDuration = 0.18f;
@@ -72,6 +75,7 @@ public class PlayerStats : MonoBehaviour
     private float dashTimer;
     private float knockbackTimer;
     private float perfectDodgeBuffTimer;
+    private float bullChargeLockReleaseTimer;
     private Vector3 dashVelocity;
     private Vector3 knockbackVelocity;
     private Transform firstPersonRoot;
@@ -210,6 +214,7 @@ public class PlayerStats : MonoBehaviour
         }
 
         UpdateStun();
+        UpdateBullChargeLock();
         UpdateInvulnerability();
         UpdatePerfectDodgeBuff();
         UpdateStamina();
@@ -327,12 +332,13 @@ public class PlayerStats : MonoBehaviour
     public void SetBullChargeLock(bool active)
     {
         bool nextValue = active && !IsDead;
-        if (bullChargeLocked == nextValue)
-            return;
-
-        SetBullChargeLockStateInternal(nextValue);
-        if (bullChargeLocked)
+        if (nextValue)
         {
+            bullChargeLockReleaseTimer = 0f;
+            if (bullChargeLocked)
+                return;
+
+            SetBullChargeLockStateInternal(true);
             isActing = false;
             dashTimer = 0f;
             dashVelocity = Vector3.zero;
@@ -342,7 +348,22 @@ public class PlayerStats : MonoBehaviour
             return;
         }
 
-        RestoreGameplayControlsIfAvailable();
+        if (!bullChargeLocked)
+        {
+            bullChargeLockReleaseTimer = 0f;
+            return;
+        }
+
+        float releaseDelay = Mathf.Max(0f, bullChargeLockReleaseDelay);
+        if (releaseDelay <= 0f)
+        {
+            ReleaseBullChargeLockImmediate();
+            return;
+        }
+
+        bullChargeLockReleaseTimer = Mathf.Max(bullChargeLockReleaseTimer, releaseDelay);
+        StopMovementImmediate();
+        SetShooterControlEnabled(false);
     }
 
     public void SetHoldingCloth(bool value)
@@ -450,6 +471,7 @@ public class PlayerStats : MonoBehaviour
         knockbackTimer = 0f;
         stunTimer = 0f;
         perfectDodgeBuffTimer = 0f;
+        bullChargeLockReleaseTimer = 0f;
         dashVelocity = Vector3.zero;
         knockbackVelocity = Vector3.zero;
         LastDashTime = -999f;
@@ -597,6 +619,19 @@ public class PlayerStats : MonoBehaviour
                 EnsureGameplayLookUnlocked();
             OnStunStateChanged?.Invoke(false);
         }
+    }
+
+    private void UpdateBullChargeLock()
+    {
+        if (!bullChargeLocked || bullChargeLockReleaseTimer <= 0f)
+            return;
+
+        StopMovementImmediate();
+        bullChargeLockReleaseTimer = Mathf.Max(0f, bullChargeLockReleaseTimer - Time.deltaTime);
+        if (bullChargeLockReleaseTimer > 0f)
+            return;
+
+        ReleaseBullChargeLockImmediate();
     }
 
     private void UpdateDash()
@@ -751,6 +786,7 @@ public class PlayerStats : MonoBehaviour
         currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
         isActing = false;
         isStunned = false;
+        bullChargeLockReleaseTimer = 0f;
         SetBullChargeLockStateInternal(false);
         SetHoldingCloth(false);
         StopMovementImmediate();
@@ -777,6 +813,16 @@ public class PlayerStats : MonoBehaviour
 
         bullChargeLocked = nextValue;
         OnBullChargeLockStateChanged?.Invoke(nextValue);
+    }
+
+    private void ReleaseBullChargeLockImmediate()
+    {
+        bullChargeLockReleaseTimer = 0f;
+        if (!bullChargeLocked)
+            return;
+
+        SetBullChargeLockStateInternal(false);
+        RestoreGameplayControlsIfAvailable();
     }
 
     private void CachePresentationReferences()
