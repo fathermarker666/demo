@@ -179,12 +179,9 @@ public partial class BullfightHudController : MonoBehaviour
     private Text phaseTwoForceLabel;
     private Text phaseTwoForceValue;
     private Image phaseTwoForceThresholdMarker;
-    private Sprite cachedBullFillSprite;
-    private Sprite phaseTwoBullFillSprite;
     private Color cachedBullFillColor;
     private Color cachedPlayerStaminaFillColor;
     private bool hasCachedBullFillColor;
-    private bool hasResolvedBullPhaseTwoFillSprite;
     private bool hasCachedPlayerStaminaFillColor;
     private bool layoutDirty = true;
     private bool legacyUiDisabled;
@@ -271,10 +268,7 @@ public partial class BullfightHudController : MonoBehaviour
         phaseTwoForceLabel = null;
         phaseTwoForceValue = null;
         phaseTwoForceThresholdMarker = null;
-        cachedBullFillSprite = null;
-        phaseTwoBullFillSprite = null;
         hasCachedBullFillColor = false;
-        hasResolvedBullPhaseTwoFillSprite = false;
         hasCachedPlayerStaminaFillColor = false;
         legacyUiDisabled = false;
         ResetArcadeHudRuntime();
@@ -320,7 +314,6 @@ public partial class BullfightHudController : MonoBehaviour
         PlacePlayerBarLabel(playerStaminaSlider, playerStaminaLabelName, "\u73a9\u5bb6\u9ad4\u529b", playerStaminaLabelColor, playerStaminaLabelOffset * playerHudScale);
         CachePlayerStaminaFillColor();
         EnsurePhaseTwoForceUi();
-        CacheBullPhaseTwoFillSprite();
         PlaceBullHealthBar(bullHealthSlider);
         EnsurePhaseDisplayUi();
         EnsurePhaseTwoOverlayUi();
@@ -425,15 +418,6 @@ public partial class BullfightHudController : MonoBehaviour
 
         cachedPlayerStaminaFillColor = fillImage.color;
         hasCachedPlayerStaminaFillColor = true;
-    }
-
-    private void CacheBullPhaseTwoFillSprite()
-    {
-        if (bullHealthSlider == null || hasResolvedBullPhaseTwoFillSprite)
-            return;
-
-        phaseTwoBullFillSprite = ResolveBullPhaseTwoFillSprite(bullHealthSlider);
-        hasResolvedBullPhaseTwoFillSprite = phaseTwoBullFillSprite != null;
     }
 
     private void EnsurePhaseTwoForceUi()
@@ -563,7 +547,10 @@ public partial class BullfightHudController : MonoBehaviour
         title.color = bullBossTitleColor;
         title.text = "BULL HP";
 
-        ConfigureDecorLine(GetOrCreateUiImage(bullBossRoot, bullBossTopLineName), new Vector2(0f, -2f), new Vector2(742f, 3f));
+        Transform existingTopLine = bullBossRoot.Find(bullBossTopLineName);
+        if (existingTopLine != null)
+            existingTopLine.gameObject.SetActive(false);
+
         ConfigureDecorLine(GetOrCreateUiImage(bullBossRoot, bullBossLeftWingName), new Vector2(-395f, -13f), new Vector2(70f, 6f));
         ConfigureDecorLine(GetOrCreateUiImage(bullBossRoot, bullBossRightWingName), new Vector2(395f, -13f), new Vector2(70f, 6f));
         ConfigureDecorLine(GetOrCreateUiImage(bullBossRoot, bullBossLeftCapName), new Vector2(-364f, -13f), new Vector2(6f, 18f));
@@ -990,42 +977,16 @@ public partial class BullfightHudController : MonoBehaviour
         Image fillImage = bullHealthSlider.fillRect != null ? bullHealthSlider.fillRect.GetComponent<Image>() : null;
         if (fillImage != null && !hasCachedBullFillColor)
         {
-            cachedBullFillSprite = fillImage.sprite;
             cachedBullFillColor = fillImage.color;
             hasCachedBullFillColor = true;
         }
 
         bool phaseTwoActive = gameFlow != null && gameFlow.ShouldShowPhaseTwoOverlay();
         if (fillImage != null && hasCachedBullFillColor)
-        {
-            fillImage.sprite = phaseTwoActive && phaseTwoBullFillSprite != null ? phaseTwoBullFillSprite : cachedBullFillSprite;
             fillImage.color = phaseTwoActive ? bullPhaseTwoFillColor : cachedBullFillColor;
-        }
 
         SetBossSegmentVisible(bullBossSegmentLeft, phaseTwoActive);
         SetBossSegmentVisible(bullBossSegmentRight, phaseTwoActive);
-    }
-
-    private static Sprite ResolveBullPhaseTwoFillSprite(Slider slider)
-    {
-        if (slider == null)
-            return null;
-
-        Transform originalParent = slider.transform.parent;
-        if (originalParent == null)
-            return null;
-
-        foreach (Transform child in originalParent)
-        {
-            if (child == slider.transform)
-                continue;
-
-            Image siblingImage = child.GetComponent<Image>();
-            if (siblingImage != null && siblingImage.sprite != null)
-                return siblingImage.sprite;
-        }
-
-        return null;
     }
 
     private void GetPhaseTwoOverlayContent(out string titleText, out string subtitleText, out string statusText)

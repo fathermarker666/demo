@@ -25364,6 +25364,7 @@ MonoBehaviour:
   phaseOneToPhaseTwoVideoClip: {fileID: 32900000, guid: 183a55fd24397424197e9b655f0a975a,
     type: 3}
   phaseOneToPhaseTwoVideoVolume: 1
+  phaseOneToPhaseTwoSkipCheatKey: 54
   phaseTwoTimeScale: 0.75
   mercyEndingDelay: 15
   introDuration: 2.8
@@ -106641,6 +106642,31 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Camera
       value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 4604440560218557309, guid: 5f6d61d2445edd5469d8ad6483645d9f,
+        type: 3}
+      propertyPath: m_Type
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4604440560218557309, guid: 5f6d61d2445edd5469d8ad6483645d9f,
+        type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    - target: {fileID: 4604440560218557309, guid: 5f6d61d2445edd5469d8ad6483645d9f,
+        type: 3}
+      propertyPath: m_Color.b
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4604440560218557309, guid: 5f6d61d2445edd5469d8ad6483645d9f,
+        type: 3}
+      propertyPath: m_Color.g
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4604440560218557309, guid: 5f6d61d2445edd5469d8ad6483645d9f,
+        type: 3}
+      propertyPath: m_Color.r
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4785981426187249948, guid: 5f6d61d2445edd5469d8ad6483645d9f,
         type: 3}
