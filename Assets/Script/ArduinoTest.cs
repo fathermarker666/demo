@@ -46,6 +46,8 @@ public class ArduinoTest : MonoBehaviour
     bool phaseTwoCalibrationRequested;
     bool phaseTwoCalibrationReadyReceived;
     bool phaseTwoFirstForceReceived;
+    bool phaseTwoCalibrationBridgeForwarded;
+    bool phaseTwoCalibrationBridgeFailed;
     string lastPhaseTwoDiagnosticMessage = string.Empty;
     SensorConnectionState connectionState = SensorConnectionState.Disconnected;
     Gamepad virtualGamepad;
@@ -72,6 +74,10 @@ public class ArduinoTest : MonoBehaviour
     public bool HasReceivedPhaseTwoCalibrationReady => phaseTwoCalibrationReadyReceived;
     public bool IsAwaitingPhaseTwoCalibrationReady => phaseTwoCalibrationRequested && !phaseTwoCalibrationReadyReceived;
     public bool HasReceivedPhaseTwoCalibrationForce => phaseTwoFirstForceReceived;
+    public bool HasForwardedPhaseTwoCalibrationCommand => phaseTwoCalibrationBridgeForwarded;
+    public bool HasFailedPhaseTwoCalibrationCommandForward => phaseTwoCalibrationBridgeFailed;
+    public bool IsAwaitingPhaseTwoCalibrationBridge =>
+        phaseTwoCalibrationRequested && !phaseTwoCalibrationBridgeForwarded && !phaseTwoCalibrationBridgeFailed;
     public string CurrentConnectionStatus
     {
         get
@@ -229,6 +235,8 @@ public class ArduinoTest : MonoBehaviour
         phaseTwoCalibrationRequested = true;
         phaseTwoCalibrationReadyReceived = false;
         phaseTwoFirstForceReceived = false;
+        phaseTwoCalibrationBridgeForwarded = false;
+        phaseTwoCalibrationBridgeFailed = false;
         lastPhaseTwoDiagnosticMessage = string.Empty;
 
         bool commandSent = TryWriteLine(calibrationCommand);
@@ -251,6 +259,9 @@ public class ArduinoTest : MonoBehaviour
             return;
 
         if (TryHandleUltrasonicDistanceMessage(data))
+            return;
+
+        if (TryHandlePhaseTwoBridgeDiagnosticMessage(data))
             return;
 
         if (TryHandleForceMessage(data))
@@ -307,6 +318,61 @@ public class ArduinoTest : MonoBehaviour
                 playerController?.SetPhaseTwoSensorCalibrationReady(false);
                 break;
         }
+    }
+
+    bool TryHandlePhaseTwoBridgeDiagnosticMessage(string rawData)
+    {
+        string data = rawData.Trim();
+        if (string.IsNullOrEmpty(data))
+            return false;
+
+        if (data.StartsWith("PHASE2_FIRST_FORCE_BRIDGED", StringComparison.OrdinalIgnoreCase))
+        {
+            phaseTwoCalibrationBridgeForwarded = true;
+            phaseTwoCalibrationBridgeFailed = false;
+
+            string[] parts = data.Split(new[] { ':' }, 2);
+            if (parts.Length == 2 &&
+                float.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float bridgedForce))
+            {
+                LogPhaseTwoCalibrationDiagnostic($"[ESP32] Phase Two bridge: first FORCE bridged ({bridgedForce:F1}).");
+            }
+            else
+            {
+                LogPhaseTwoCalibrationDiagnostic("[ESP32] Phase Two bridge: first FORCE bridged.");
+            }
+
+            return true;
+        }
+
+        switch (data.ToUpperInvariant())
+        {
+            case "PHASE2_CAL_SENT":
+                phaseTwoCalibrationBridgeForwarded = true;
+                phaseTwoCalibrationBridgeFailed = false;
+                LogPhaseTwoCalibrationDiagnostic("[ESP32] Phase Two bridge: CAL forwarded by receiver.");
+                return true;
+
+            case "PHASE2_CAL_NO_PEER":
+                phaseTwoCalibrationBridgeForwarded = false;
+                phaseTwoCalibrationBridgeFailed = true;
+                LogPhaseTwoCalibrationDiagnostic("[ESP32] Phase Two bridge: receiver has no handheld peer.");
+                return true;
+
+            case "PHASE2_CAL_SEND_FAIL":
+                phaseTwoCalibrationBridgeForwarded = false;
+                phaseTwoCalibrationBridgeFailed = true;
+                LogPhaseTwoCalibrationDiagnostic("[ESP32] Phase Two bridge: receiver failed to forward CAL.");
+                return true;
+
+            case "PHASE2_READY_BRIDGED":
+                phaseTwoCalibrationBridgeForwarded = true;
+                phaseTwoCalibrationBridgeFailed = false;
+                LogPhaseTwoCalibrationDiagnostic("[ESP32] Phase Two bridge: READY bridged.");
+                return true;
+        }
+
+        return false;
     }
 
     bool TryHandleControllerMessage(string rawData)

@@ -24,7 +24,7 @@ constexpr uint8_t kSensorAddress = 0x68;
 constexpr uint8_t kSdaPin = 21;
 constexpr uint8_t kSclPin = 22;
 constexpr uint32_t kSerialBaud = 115200;
-constexpr uint32_t kI2cClock = 400000;
+constexpr uint32_t kI2cClock = 100000;
 constexpr uint32_t kSensorSampleIntervalMs = 20;
 constexpr uint32_t kControllerSampleIntervalMs = 20;
 constexpr uint32_t kCalibrationDurationMs = 350;
@@ -51,7 +51,7 @@ constexpr float kStickDeadzone = 0.12f;
 constexpr bool kInvertLeftStickX = false;
 constexpr bool kInvertLeftStickY = false;
 constexpr bool kInvertRightStickX = false;
-constexpr bool kInvertRightStickY = true;
+constexpr bool kInvertRightStickY = false;
 
 constexpr uint8_t kButtonAPin = 4;
 constexpr uint8_t kButtonBPin = 13;
@@ -180,6 +180,7 @@ unsigned long gCalibrationStartMs = 0;
 float gAccelYOffset = 0.0f;
 float gNoiseBandY = Config::kMinimumNoiseBandG;
 float gLastForce = 0.0f;
+uint8_t gSensorWhoAmI = 0x00;
 bool gSensorReady = false;
 bool gThrustLatched = false;
 bool gPendingReadyPulse = false;
@@ -233,11 +234,33 @@ bool readAccelY(float& accelYG) {
   return true;
 }
 
+void logSensorMode(const char* modeLabel) {
+  if (modeLabel == nullptr || modeLabel[0] == '\0') {
+    return;
+  }
+
+  Serial.print("PHASE2_SENSOR_MODE:");
+  Serial.println(modeLabel);
+}
+
+void logAccelReadFailure() {
+  static unsigned long lastLogAt = 0;
+  const unsigned long now = millis();
+  if (now - lastLogAt < 1000) {
+    return;
+  }
+
+  lastLogAt = now;
+  Serial.println("ACCEL_READ_FAIL");
+}
+
 bool initSensor() {
   uint8_t whoAmI = 0;
   if (!readRegisters(MpuReg::kWhoAmI, &whoAmI, 1)) {
+    gSensorWhoAmI = 0x00;
     return false;
   }
+  gSensorWhoAmI = whoAmI;
 
   if (!writeRegister(MpuReg::kPwrMgmt1, 0x01)) {
     return false;
@@ -362,6 +385,7 @@ void startCalibration() {
   gThrustLatched = false;
   gLastForce = 0.0f;
   gPendingReadyPulse = false;
+  logSensorMode("CALIBRATING");
 }
 
 void finishCalibration() {
@@ -378,6 +402,7 @@ void finishCalibration() {
   gThrustLatched = false;
   gLastForce = 0.0f;
   gPendingReadyPulse = true;
+  logSensorMode("MONITORING");
 }
 
 float computeForce(float accelYG) {
@@ -444,10 +469,12 @@ void sendControllerPacket() {
       normalizeStickAxis(analogRead(Config::kLeftStickXPin), gStickCenterRaw[0], kStickInvert[0]));
   packet.leftY = encodeStickAxis(
       normalizeStickAxis(analogRead(Config::kLeftStickYPin), gStickCenterRaw[1], kStickInvert[1]));
+  // The physical right-stick axes are wired opposite to the module silk labels.
+  // Swap them here so Unity still receives standard rightStick.x / rightStick.y.
   packet.rightX = encodeStickAxis(
-      normalizeStickAxis(analogRead(Config::kRightStickXPin), gStickCenterRaw[2], kStickInvert[2]));
-  packet.rightY = encodeStickAxis(
       normalizeStickAxis(analogRead(Config::kRightStickYPin), gStickCenterRaw[3], kStickInvert[3]));
+  packet.rightY = encodeStickAxis(
+      normalizeStickAxis(analogRead(Config::kRightStickXPin), gStickCenterRaw[2], kStickInvert[2]));
   packet.buttons = readControllerButtonsMask();
 
   const esp_err_t result = esp_now_send(
@@ -484,6 +511,9 @@ void updateSensorTask() {
 
   float accelYG = 0.0f;
   const bool accelValid = gSensorReady && readAccelY(accelYG);
+  if (gSensorReady && !accelValid) {
+    logAccelReadFailure();
+  }
 
   if (gMode == RunMode::Calibrating) {
     if (accelValid) {
@@ -630,11 +660,15 @@ void setup() {
   gLastSensorSampleMs = millis();
   gLastControllerSampleMs = millis();
 
+  Serial.print("WHOAMI:0x");
+  Serial.println(gSensorWhoAmI, HEX);
+
   if (!gSensorReady) {
     Serial.println("SENSOR_INIT_FAIL");
     return;
   }
 
+  Serial.println("SENSOR_INIT_OK");
   startCalibration();
 }
 

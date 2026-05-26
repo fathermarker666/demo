@@ -59,6 +59,7 @@ uint8_t gHandheldMac[6] = {};
 bool gHasHandheldMac = false;
 bool gLastThrustLatched = false;
 bool gAwaitingCalibrationReady = false;
+bool gAwaitingFirstCalibrationForce = false;
 char gSerialCommandBuffer[8];
 uint8_t gSerialCommandLength = 0;
 
@@ -117,6 +118,19 @@ void emitThrustDetected() {
   Serial.println("THRUST_DETECTED");
 }
 
+void emitPhaseTwoDiagnostic(const char* token) {
+  if (token == nullptr || token[0] == '\0') {
+    return;
+  }
+
+  Serial.println(token);
+}
+
+void emitPhaseTwoFirstForceBridged(float force) {
+  Serial.print("PHASE2_FIRST_FORCE_BRIDGED:");
+  Serial.println(force, 1);
+}
+
 void emitController(const ControllerPacket& packet) {
   Serial.print("CTRL:");
   Serial.print(packet.leftX);
@@ -144,6 +158,7 @@ void processSensorPacket(const uint8_t* mac, const SensorPacket& packet) {
 
   const bool inferReadyFromForce = gAwaitingCalibrationReady && hasValidForce;
   if (readyPulse || inferReadyFromForce) {
+    emitPhaseTwoDiagnostic("PHASE2_READY_BRIDGED");
     emitReady();
     gAwaitingCalibrationReady = false;
     gLastThrustLatched = false;
@@ -154,6 +169,11 @@ void processSensorPacket(const uint8_t* mac, const SensorPacket& packet) {
       gLastThrustLatched = false;
     }
     return;
+  }
+
+  if (gAwaitingFirstCalibrationForce) {
+    emitPhaseTwoFirstForceBridged(packet.force);
+    gAwaitingFirstCalibrationForce = false;
   }
 
   emitForce(packet.force);
@@ -207,10 +227,16 @@ void onEspNowDataRecv(const uint8_t* mac, const uint8_t* incomingData, int len) 
 
 void sendCalibrationCommand() {
   if (!gHasHandheldMac) {
+    emitPhaseTwoDiagnostic("PHASE2_CAL_NO_PEER");
+    gAwaitingCalibrationReady = false;
+    gAwaitingFirstCalibrationForce = false;
     return;
   }
 
   if (!ensurePeerRegistered(gHandheldMac)) {
+    emitPhaseTwoDiagnostic("PHASE2_CAL_SEND_FAIL");
+    gAwaitingCalibrationReady = false;
+    gAwaitingFirstCalibrationForce = false;
     return;
   }
 
@@ -221,8 +247,14 @@ void sendCalibrationCommand() {
   const esp_err_t result = esp_now_send(
       gHandheldMac, reinterpret_cast<const uint8_t*>(&packet), sizeof(packet));
   if (result == ESP_OK) {
+    emitPhaseTwoDiagnostic("PHASE2_CAL_SENT");
     gAwaitingCalibrationReady = true;
+    gAwaitingFirstCalibrationForce = true;
     gLastThrustLatched = false;
+  } else {
+    emitPhaseTwoDiagnostic("PHASE2_CAL_SEND_FAIL");
+    gAwaitingCalibrationReady = false;
+    gAwaitingFirstCalibrationForce = false;
   }
 }
 

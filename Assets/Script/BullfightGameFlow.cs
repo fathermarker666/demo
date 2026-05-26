@@ -1401,6 +1401,12 @@ public partial class BullfightGameFlow : MonoBehaviour
                                     arduinoTest != null &&
                                     !arduinoTest.IsAwaitingPhaseTwoCalibrationReady &&
                                     !arduinoTest.HasReceivedPhaseTwoCalibrationForce;
+        bool waitingForCalibrationBridge = sensorCalibrationRequested &&
+                                           arduinoTest != null &&
+                                           arduinoTest.IsAwaitingPhaseTwoCalibrationBridge;
+        bool calibrationBridgeFailed = sensorCalibrationRequested &&
+                                       arduinoTest != null &&
+                                       arduinoTest.HasFailedPhaseTwoCalibrationCommandForward;
         bool shouldUseSensorCalibration = sensorCalibrationRequested;
 
         if (shouldUseSensorCalibration)
@@ -1433,6 +1439,16 @@ public partial class BullfightGameFlow : MonoBehaviour
             {
                 phaseTwoCalibrationStatusText = "\u7b49\u5f85\u611f\u6e2c\u5668\u9023\u7dda 0%";
                 LogPhaseTwoCalibrationConsole("[Phase Two] Waiting for sensor link.");
+            }
+            else if (calibrationBridgeFailed)
+            {
+                phaseTwoCalibrationStatusText = "CAL \u8f49\u767c\u5931\u6557 0%";
+                LogPhaseTwoCalibrationConsole("[Phase Two] CAL forwarding failed.");
+            }
+            else if (waitingForCalibrationBridge)
+            {
+                phaseTwoCalibrationStatusText = "\u7b49\u5f85 CAL \u8f49\u767c 0%";
+                LogPhaseTwoCalibrationConsole("[Phase Two] Waiting for CAL bridge.");
             }
             else if (waitingForReady)
             {
