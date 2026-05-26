@@ -389,10 +389,10 @@ public partial class BullfightHudController
             arcadeEligibilityText.text = "UNRANKED";
             arcadeEligibilityPill.color = new Color(0.46f, 0.11f, 0.11f, 0.94f);
         }
-        else if (arcadeState.IsLeaderboardAtRisk)
+        else if (arcadeState.IsMercyJackpotWindow)
         {
-            arcadeEligibilityText.text = "RANKING AT RISK";
-            arcadeEligibilityPill.color = new Color(0.72f, 0.45f, 0.08f, 0.94f);
+            arcadeEligibilityText.text = "MERCY JACKPOT";
+            arcadeEligibilityPill.color = new Color(0.76f, 0.56f, 0.12f, 0.96f);
         }
         else
         {
@@ -733,7 +733,10 @@ public partial class BullfightHudController
         SetFinalResultRow(1, $"MAX COMBO       x{activeArcadeRunSummaryHud.MaxComboMultiplier:0.00} / {activeArcadeRunSummaryHud.MaxComboCount}");
         SetFinalResultRow(2, $"PHASE 1         {FormatArcadeSignedScore(activeArcadeRunSummaryHud.Phase1Subtotal)}");
         SetFinalResultRow(3, $"PHASE 2         {FormatArcadeSignedScore(activeArcadeRunSummaryHud.Phase2Subtotal)}");
-        SetFinalResultRow(4, $"CLEAR BONUS     {FormatArcadeSignedScore(activeArcadeRunSummaryHud.ClearBonusSubtotal)}");
+        string bonusLabel = activeArcadeRunSummaryHud.EndingType == BullfightGameFlow.EndingType.Mercy
+            ? "MERCY BONUS"
+            : "CLEAR BONUS";
+        SetFinalResultRow(4, $"{bonusLabel,-15}{FormatArcadeSignedScore(activeArcadeRunSummaryHud.ClearBonusSubtotal)}");
         SetFinalResultRow(5, $"RANKING         {activeArcadeRunSummaryHud.RankingStatusText}");
 
         for (int index = 0; index < arcadeFinalResultRows.Length; index++)

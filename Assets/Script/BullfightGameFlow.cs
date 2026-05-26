@@ -2073,9 +2073,6 @@ public partial class BullfightGameFlow : MonoBehaviour
         if (currentPhase == GamePhase.Ending)
             return;
 
-        if (ending == EndingType.Mercy)
-            arcadeScoring?.MarkRunUnranked("Mercy");
-
         if (ending == EndingType.Tragedy && playerStats != null)
             playerStats.ForceEndingDeathPresentation();
 

@@ -27,6 +27,7 @@ public sealed class ArcadeScoreState
     public float MaxComboMultiplier = 1f;
     public bool IsLeaderboardEligible = true;
     public bool IsLeaderboardAtRisk;
+    public bool IsMercyJackpotWindow;
     public string LeaderboardBlockReason = string.Empty;
     public float PhaseOneTimeRemaining;
 }
@@ -109,6 +110,7 @@ public sealed class BullfightArcadeScoring
     private const int PhaseOneNoDamageBonus = 1500;
     private const int PhaseTwoClearBonus = 3500;
     private const int PhaseTwoPerfectRunBonus = 2500;
+    private const int MercyJackpotTargetScore = 99999999;
     private const float PhaseOneDurationSeconds = 210f;
     private const float BanderillasMissTimeout = 1f;
     private const int PendingUiEventLimit = 64;
@@ -216,12 +218,18 @@ public sealed class BullfightArcadeScoring
 
         if (gameFlow != null)
         {
-            bool atRisk = state.IsLeaderboardEligible &&
-                          gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo &&
-                          gameFlow.CurrentPhaseTwoState == BullfightGameFlow.PhaseTwoState.Standoff &&
-                          gameFlow.PhaseTwoMercyTimeRemaining > 0f &&
-                          gameFlow.PhaseTwoMercyTimeRemaining <= 5f;
-            state.IsLeaderboardAtRisk = atRisk;
+            bool mercyJackpotWindow = state.IsLeaderboardEligible &&
+                                      gameFlow.currentPhase == BullfightGameFlow.GamePhase.PhaseTwo &&
+                                      gameFlow.CurrentPhaseTwoState == BullfightGameFlow.PhaseTwoState.Standoff &&
+                                      gameFlow.PhaseTwoMercyTimeRemaining > 0f &&
+                                      gameFlow.PhaseTwoMercyTimeRemaining <= 5f;
+            state.IsMercyJackpotWindow = mercyJackpotWindow;
+            state.IsLeaderboardAtRisk = false;
+        }
+        else
+        {
+            state.IsMercyJackpotWindow = false;
+            state.IsLeaderboardAtRisk = false;
         }
 
         if (ShouldTrackPhaseOneCombat() && pendingPhaseOneSummary == null && !phaseOneTimedOut)
@@ -427,14 +435,16 @@ public sealed class BullfightArcadeScoring
 
         EnsureDailyHighScoreBucketCurrent();
 
-        if (endingType == BullfightGameFlow.EndingType.Mercy)
-            MarkRunUnranked("Mercy");
-
         if (endingType == BullfightGameFlow.EndingType.Glory)
         {
             ApplyFlatScoreToCurrentPhase(PhaseTwoClearBonus, true);
             if (!phaseTwoHadLoss)
                 ApplyFlatScoreToCurrentPhase(PhaseTwoPerfectRunBonus, true);
+        }
+        else if (endingType == BullfightGameFlow.EndingType.Mercy)
+        {
+            int mercyJackpotBonus = Mathf.Max(0, MercyJackpotTargetScore - state.CurrentScore);
+            ApplyFlatScoreToCurrentPhase(mercyJackpotBonus, true);
         }
 
         int previousHighScore = state.PreviousHighScore;
@@ -503,6 +513,7 @@ public sealed class BullfightArcadeScoring
         state.MaxComboMultiplier = 1f;
         state.IsLeaderboardEligible = enabled;
         state.IsLeaderboardAtRisk = false;
+        state.IsMercyJackpotWindow = false;
         state.LeaderboardBlockReason = string.Empty;
         state.PhaseOneTimeRemaining = PhaseOneDurationSeconds;
         phaseOneSubtotal = 0;
