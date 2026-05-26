@@ -222,6 +222,7 @@ public partial class BullfightGameFlow : MonoBehaviour
     [Header("Phase One To Phase Two Video")]
     public VideoClip phaseOneToPhaseTwoVideoClip;
     [Range(0f, 2f)] public float phaseOneToPhaseTwoVideoVolume = 1f;
+    public KeyCode phaseOneToPhaseTwoSkipCheatKey = KeyCode.Alpha6;
 
     [Header("Phase Two")]
     public float phaseTwoTimeScale = 0.75f;
@@ -1021,8 +1022,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         phaseOneToPhaseTwoVideoPlaybackActive = true;
         LockGameplayForTutorialCompletionVideo();
         ShowEndingSkipUi(false);
-        EnsureTutorialCompletionSkipUi();
-        ShowTutorialCompletionSkipUi(true);
+        ShowTutorialCompletionSkipUi(false);
 
         endingVideoPlayer.loopPointReached -= HandleEndingVideoCompleted;
         endingVideoPlayer.loopPointReached -= HandleTutorialCompletionVideoCompleted;
@@ -1101,7 +1101,7 @@ public partial class BullfightGameFlow : MonoBehaviour
 
     private void UpdatePhaseOneToPhaseTwoVideoPlayback()
     {
-        if (IsTutorialCompletionVideoSkipPressedThisFrame())
+        if (IsPhaseOneToPhaseTwoVideoSkipCheatPressedThisFrame())
         {
             SkipPhaseOneToPhaseTwoVideo();
             return;
@@ -2654,6 +2654,14 @@ public partial class BullfightGameFlow : MonoBehaviour
                 (Keyboard.current.enterKey.wasPressedThisFrame ||
                  Keyboard.current.numpadEnterKey.wasPressedThisFrame)) ||
                (Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame);
+    }
+
+    private bool IsPhaseOneToPhaseTwoVideoSkipCheatPressedThisFrame()
+    {
+        if (phaseOneToPhaseTwoSkipCheatKey == KeyCode.None)
+            return false;
+
+        return Input.GetKeyDown(phaseOneToPhaseTwoSkipCheatKey);
     }
 
     private bool IsEndingSkipKeyboardPressedThisFrame()
