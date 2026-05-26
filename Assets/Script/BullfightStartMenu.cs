@@ -110,8 +110,14 @@ public class BullfightStartMenu : MonoBehaviour
         if (Time.unscaledTime < suppressConfirmUntilUnscaledTime)
             return;
 
-        if (!WasConfirmRequestedThisFrame() || EventSystem.current == null)
+        if (!WasConfirmRequestedThisFrame())
             return;
+
+        if (EventSystem.current == null)
+        {
+            OnStartButtonPressed();
+            return;
+        }
 
         GameObject selected = EventSystem.current.currentSelectedGameObject;
         if (selected == tutorialButton?.gameObject)

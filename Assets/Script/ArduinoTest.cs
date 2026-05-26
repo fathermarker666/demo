@@ -6,8 +6,11 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 
+[DefaultExecutionOrder(-1000)]
 public class ArduinoTest : MonoBehaviour
 {
+    public const string VirtualGamepadUsage = "ESP32VirtualGamepad";
+
     public enum SensorConnectionState
     {
         Disconnected,
@@ -40,6 +43,10 @@ public class ArduinoTest : MonoBehaviour
     string lastOpenError = string.Empty;
     float nextPlayerResolveAt = -1f;
     string lastOpenFailureWarningMessage = string.Empty;
+    bool phaseTwoCalibrationRequested;
+    bool phaseTwoCalibrationReadyReceived;
+    bool phaseTwoFirstForceReceived;
+    string lastPhaseTwoDiagnosticMessage = string.Empty;
     SensorConnectionState connectionState = SensorConnectionState.Disconnected;
     Gamepad virtualGamepad;
 
@@ -61,6 +68,10 @@ public class ArduinoTest : MonoBehaviour
     public float LastUltrasonicDistanceCm => lastUltrasonicDistanceCm;
     public bool IsUltrasonicHoldingCloth => isUltrasonicHoldingCloth;
     public SensorConnectionState ConnectionState => connectionState;
+    public bool IsPhaseTwoCalibrationSessionActive => phaseTwoCalibrationRequested;
+    public bool HasReceivedPhaseTwoCalibrationReady => phaseTwoCalibrationReadyReceived;
+    public bool IsAwaitingPhaseTwoCalibrationReady => phaseTwoCalibrationRequested && !phaseTwoCalibrationReadyReceived;
+    public bool HasReceivedPhaseTwoCalibrationForce => phaseTwoFirstForceReceived;
     public string CurrentConnectionStatus
     {
         get
@@ -215,7 +226,15 @@ public class ArduinoTest : MonoBehaviour
             OpenPort();
 
         playerController?.SetPhaseTwoSensorCalibrationReady(false);
-        TryWriteLine(calibrationCommand);
+        phaseTwoCalibrationRequested = true;
+        phaseTwoCalibrationReadyReceived = false;
+        phaseTwoFirstForceReceived = false;
+        lastPhaseTwoDiagnosticMessage = string.Empty;
+
+        bool commandSent = TryWriteLine(calibrationCommand);
+        LogPhaseTwoCalibrationDiagnostic(commandSent
+            ? "[ESP32] Phase Two calibration: CAL sent."
+            : "[ESP32] Phase Two calibration: CAL could not be sent because the serial bridge is unavailable.");
     }
 
     void HandleSensorMessage(string data)
@@ -246,6 +265,11 @@ public class ArduinoTest : MonoBehaviour
         if (message.Contains("READY"))
         {
             playerController?.SetPhaseTwoSensorCalibrationReady(true);
+            if (phaseTwoCalibrationRequested && !phaseTwoCalibrationReadyReceived)
+            {
+                phaseTwoCalibrationReadyReceived = true;
+                LogPhaseTwoCalibrationDiagnostic("[ESP32] Phase Two calibration: READY received.");
+            }
             return;
         }
 
@@ -310,6 +334,7 @@ public class ArduinoTest : MonoBehaviour
         if (virtualGamepad == null)
             return true;
 
+        virtualGamepad.MakeCurrent();
         GamepadState state = default;
         state.leftStick = new Vector2(NormalizeControllerAxis(leftX), NormalizeControllerAxis(leftY));
         state.rightStick = new Vector2(NormalizeControllerAxis(rightX), NormalizeControllerAxis(rightY));
@@ -388,6 +413,7 @@ public class ArduinoTest : MonoBehaviour
             lastParsedForceAt = Time.unscaledTime;
             playerController.SetPhaseTwoSensorCalibrationReady(true);
             playerController.SetPhaseTwoSensorReading(parsedForce, Mathf.Clamp(Mathf.Abs(parsedForce), 0f, Mathf.Max(1f, maxForceValue)));
+            RegisterPhaseTwoForceDiagnostic(parsedForce);
             return true;
         }
 
@@ -397,6 +423,7 @@ public class ArduinoTest : MonoBehaviour
         lastParsedForceAt = Time.unscaledTime;
         playerController.SetPhaseTwoSensorCalibrationReady(true);
         playerController.SetPhaseTwoSensorReading(rawForce, Mathf.Clamp(Mathf.Abs(rawForce), 0f, Mathf.Max(1f, maxForceValue)));
+        RegisterPhaseTwoForceDiagnostic(rawForce);
         return true;
     }
 
@@ -420,22 +447,25 @@ public class ArduinoTest : MonoBehaviour
         lastParsedForceAt = Time.unscaledTime;
         playerController.SetPhaseTwoSensorCalibrationReady(true);
         playerController.SetPhaseTwoSensorReading(signedSignal, Mathf.Clamp(displayedForce, 0f, Mathf.Max(1f, maxForceValue)));
+        RegisterPhaseTwoForceDiagnostic(signedSignal);
         return true;
     }
 
-    void TryWriteLine(string line)
+    bool TryWriteLine(string line)
     {
         if (string.IsNullOrWhiteSpace(line) || sp == null || !sp.IsOpen)
-            return;
+            return false;
 
         try
         {
             sp.WriteLine(line);
+            return true;
         }
         catch (Exception e)
         {
             lastOpenError = e.Message;
             Debug.LogWarning("Serial write failed: " + e.Message);
+            return false;
         }
     }
 
@@ -491,6 +521,27 @@ public class ArduinoTest : MonoBehaviour
         Debug.LogWarning(message);
     }
 
+    void LogPhaseTwoCalibrationDiagnostic(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message) || message == lastPhaseTwoDiagnosticMessage)
+            return;
+
+        lastPhaseTwoDiagnosticMessage = message;
+        Debug.Log(message);
+    }
+
+    void RegisterPhaseTwoForceDiagnostic(float forceValue)
+    {
+        if (!phaseTwoCalibrationRequested || phaseTwoFirstForceReceived)
+            return;
+
+        phaseTwoFirstForceReceived = true;
+        if (!phaseTwoCalibrationReadyReceived)
+            phaseTwoCalibrationReadyReceived = true;
+
+        LogPhaseTwoCalibrationDiagnostic($"[ESP32] Phase Two calibration: first FORCE received ({forceValue:F1}).");
+    }
+
     void SetConnectionState(SensorConnectionState newState)
     {
         if (connectionState == newState)
@@ -521,6 +572,8 @@ public class ArduinoTest : MonoBehaviour
             return;
 
         virtualGamepad = InputSystem.AddDevice<Gamepad>(virtualGamepadName);
+        InputSystem.SetDeviceUsage(virtualGamepad, VirtualGamepadUsage);
+        virtualGamepad.MakeCurrent();
         ResetVirtualGamepadState();
     }
 

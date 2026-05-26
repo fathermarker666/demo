@@ -49,7 +49,7 @@ constexpr uint8_t kStickCalibrationSamples = 40;
 constexpr uint8_t kStickCalibrationDelayMs = 5;
 constexpr float kStickDeadzone = 0.12f;
 constexpr bool kInvertLeftStickX = false;
-constexpr bool kInvertLeftStickY = true;
+constexpr bool kInvertLeftStickY = false;
 constexpr bool kInvertRightStickX = false;
 constexpr bool kInvertRightStickY = true;
 

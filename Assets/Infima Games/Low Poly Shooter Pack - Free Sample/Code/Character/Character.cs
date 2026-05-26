@@ -916,6 +916,9 @@ namespace InfimaGames.LowPolyShooterPack
 			if (device == null)
 				return false;
 
+			if (HasDeviceUsage(device, ArduinoTest.VirtualGamepadUsage))
+				return true;
+
 			if (device.layout == "XInputControllerWindows")
 				return true;
 
@@ -931,6 +934,20 @@ namespace InfimaGames.LowPolyShooterPack
 			       identity.Contains("sony") ||
 			       identity.Contains("xinput") ||
 			       identity.Contains("xbox");
+		}
+
+		private static bool HasDeviceUsage(InputDevice device, string usage)
+		{
+			if (device == null || string.IsNullOrWhiteSpace(usage))
+				return false;
+
+			for (int i = 0; i < device.usages.Count; i++)
+			{
+				if (string.Equals(device.usages[i].ToString(), usage, StringComparison.OrdinalIgnoreCase))
+					return true;
+			}
+
+			return false;
 		}
 
 		private void ApplyJoystickLookAxes()

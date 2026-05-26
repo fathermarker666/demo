@@ -144,7 +144,6 @@ public class ManualStartMenuController : MonoBehaviour
         if (!IsFrontendVisible)
             return;
 
-        bool selectionMissingAtFrameStart = EventSystem.current == null || !IsValidFrontendSelection(EventSystem.current.currentSelectedGameObject);
         bool confirmRequested = WasFrontendConfirmRequestedThisFrame();
         bool cancelRequested = WasFrontendCancelRequestedThisFrame();
 
@@ -157,7 +156,7 @@ public class ManualStartMenuController : MonoBehaviour
             return;
         }
 
-        if (confirmRequested && selectionMissingAtFrameStart)
+        if (confirmRequested)
             InvokeSelectedFrontendButton();
     }
 

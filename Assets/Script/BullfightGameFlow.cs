@@ -418,6 +418,7 @@ public partial class BullfightGameFlow : MonoBehaviour
     private string tutorialFeedbackText = string.Empty;
     private string phaseTwoResolveNarrationLine = string.Empty;
     private string phaseTwoCalibrationStatusText = string.Empty;
+    private string lastPhaseTwoCalibrationConsoleMessage = string.Empty;
     private Vector3 phaseTwoResolveCenterPoint;
     private Vector3 phaseTwoResolveLeftPoint;
     private Vector3 phaseTwoResolveRightPoint;
@@ -1386,55 +1387,77 @@ public partial class BullfightGameFlow : MonoBehaviour
         ArduinoTest.SensorConnectionState sensorState = arduinoTest != null
             ? arduinoTest.ConnectionState
             : ArduinoTest.SensorConnectionState.Disconnected;
+        bool sensorCalibrationRequested = arduinoTest != null && arduinoTest.IsPhaseTwoCalibrationSessionActive;
         bool sensorConnected = sensorState == ArduinoTest.SensorConnectionState.Active;
-        bool sensorWaitingForSignal = sensorState == ArduinoTest.SensorConnectionState.PortOpenNoSignal;
         bool hasRecentForceReading = sensorConnected &&
                                      arduinoTest != null &&
                                      arduinoTest.HasRecentForcePacket &&
                                      playerController != null &&
                                      playerController.HasRecentPhaseTwoSensorReading();
-        bool shouldUseSensorCalibration = sensorConnected && hasRecentForceReading;
+        bool waitingForReady = sensorCalibrationRequested &&
+                               arduinoTest != null &&
+                               arduinoTest.IsAwaitingPhaseTwoCalibrationReady;
+        bool waitingForFirstForce = sensorCalibrationRequested &&
+                                    arduinoTest != null &&
+                                    !arduinoTest.IsAwaitingPhaseTwoCalibrationReady &&
+                                    !arduinoTest.HasReceivedPhaseTwoCalibrationForce;
+        bool shouldUseSensorCalibration = sensorCalibrationRequested;
 
         if (shouldUseSensorCalibration)
         {
-            calibrationSignalWaitTimer = 0f;
             if (!phaseTwoCalibrationUsingSensor)
             {
                 phaseTwoCalibrationUsingSensor = true;
                 calibrationHoldTimer = 0f;
                 ResetPhaseTwoCalibrationAnchor();
+                LogPhaseTwoCalibrationConsole("[Phase Two] Sensor-only calibration mode active.");
             }
+            calibrationSignalWaitTimer = hasRecentForceReading
+                ? 0f
+                : calibrationSignalWaitTimer + Time.unscaledDeltaTime;
         }
-        else
+        else if (phaseTwoCalibrationUsingSensor)
         {
-            calibrationSignalWaitTimer += Time.unscaledDeltaTime;
-            if (phaseTwoCalibrationUsingSensor)
-            {
-                phaseTwoCalibrationUsingSensor = false;
-                calibrationHoldTimer = 0f;
-                ResetPhaseTwoCalibrationAnchor();
-            }
+            phaseTwoCalibrationUsingSensor = false;
+            calibrationHoldTimer = 0f;
+            ResetPhaseTwoCalibrationAnchor();
         }
 
         int progressPercent = Mathf.RoundToInt(PhaseTwoCalibrationProgress * 100f);
         float stableThreshold = playerController != null ? playerController.PhaseTwoCalibrationStableThreshold : 2f;
-        float anchorDuration = Mathf.Max(0.1f, calibrationAnchorDuration);
-        float waitDuration = Mathf.Max(0f, calibrationSensorGraceDuration);
-        bool shouldHoldForSensor = sensorWaitingForSignal && calibrationSignalWaitTimer < waitDuration;
-
-        if (shouldHoldForSensor)
+        if (shouldUseSensorCalibration && (!sensorConnected || !hasRecentForceReading))
         {
             ResetPhaseTwoCalibrationAnchor();
             calibrationHoldTimer = 0f;
-            int waitPercent = waitDuration <= 0.01f ? 100 : Mathf.RoundToInt(Mathf.Clamp01(calibrationSignalWaitTimer / waitDuration) * 100f);
-            phaseTwoCalibrationStatusText = $"\u6e96\u5099\u6821\u6e96 {waitPercent}%";
+            if (!sensorConnected)
+            {
+                phaseTwoCalibrationStatusText = "\u7b49\u5f85\u611f\u6e2c\u5668\u9023\u7dda 0%";
+                LogPhaseTwoCalibrationConsole("[Phase Two] Waiting for sensor link.");
+            }
+            else if (waitingForReady)
+            {
+                phaseTwoCalibrationStatusText = "\u7b49\u5f85 READY 0%";
+                LogPhaseTwoCalibrationConsole("[Phase Two] Waiting for READY.");
+            }
+            else if (waitingForFirstForce)
+            {
+                phaseTwoCalibrationStatusText = "\u7b49\u5f85\u7b2c\u4e00\u7b46 FORCE 0%";
+                LogPhaseTwoCalibrationConsole("[Phase Two] Waiting for first FORCE.");
+            }
+            else
+            {
+                phaseTwoCalibrationStatusText = "\u7b49\u5f85\u7a69\u5b9a\u611f\u6e2c\u6578\u503c 0%";
+                LogPhaseTwoCalibrationConsole("[Phase Two] Sensor timeout or calibration stalled.");
+            }
             return;
         }
 
         if (shouldUseSensorCalibration && playerController != null)
         {
+            calibrationSignalWaitTimer = 0f;
             float currentForce = playerController.GetPhaseTwoSensorForce();
             float calibrationForce = playerController.GetPhaseTwoSensorCalibrationForce();
+            float anchorDuration = Mathf.Max(0.1f, calibrationAnchorDuration);
             if (!phaseTwoCalibrationAnchorLocked)
             {
                 if (calibrationAnchorTimer <= 0f)
@@ -1966,6 +1989,7 @@ public partial class BullfightGameFlow : MonoBehaviour
         calibrationHoldTimer = 0f;
         calibrationSignalWaitTimer = 0f;
         phaseTwoCalibrationUsingSensor = false;
+        lastPhaseTwoCalibrationConsoleMessage = string.Empty;
         ResetPhaseTwoCalibrationAnchor();
         phaseTwoHasCommittedAttack = false;
         currentRoundHasPerfectAdvantage = false;
@@ -1979,7 +2003,9 @@ public partial class BullfightGameFlow : MonoBehaviour
         phaseTwoAutoStartRoundAfterCalibration = autoStartRoundAfterCalibration;
         phaseTwoResolveShuttleSegment = 0;
         phaseTwoResolveNarrationLine = string.Empty;
-        phaseTwoCalibrationStatusText = GetPhaseTwoCalibrationFallbackStatus(0f);
+        phaseTwoCalibrationStatusText = arduinoTest != null
+            ? "\u6e96\u5099\u611f\u6e2c\u5668\u6821\u6e96 0%"
+            : GetPhaseTwoCalibrationFallbackStatus(0f);
         lastPhaseTwoResult = string.Empty;
         bullAI?.PlayPhaseTwoStandoffIdle();
         RequestPhaseTwoSensorCalibration();
@@ -3312,6 +3338,15 @@ public partial class BullfightGameFlow : MonoBehaviour
     private string GetPhaseTwoCalibrationStatus()
     {
         return phaseTwoState == PhaseTwoState.Calibration ? phaseTwoCalibrationStatusText : string.Empty;
+    }
+
+    private void LogPhaseTwoCalibrationConsole(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message) || message == lastPhaseTwoCalibrationConsoleMessage)
+            return;
+
+        lastPhaseTwoCalibrationConsoleMessage = message;
+        Debug.Log(message);
     }
 
     private void ResetPhaseTwoCalibrationAnchor()
