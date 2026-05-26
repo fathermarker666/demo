@@ -25352,16 +25352,16 @@ MonoBehaviour:
   audioController: {fileID: 0}
   arduinoTest: {fileID: 0}
   endingVideoPlayer: {fileID: 1655135286}
-  gloryEndingClip: {fileID: 32900000, guid: 59116cd35fe328544ba2c8817cbdd825, type: 3}
-  tragedyEndingClip: {fileID: 32900000, guid: cd83ab1ce2ca1e84c8c3987e10ab7a56, type: 3}
-  mercyEndingClip: {fileID: 32900000, guid: 749058a7f5860f947af34b0eea208d26, type: 3}
+  gloryEndingClip: {fileID: 32900000, guid: 21a6f5f36d8792846a66ebb16c5cb721, type: 3}
+  tragedyEndingClip: {fileID: 32900000, guid: 40272870d9396a644a96ed9e1912bfdb, type: 3}
+  mercyEndingClip: {fileID: 32900000, guid: e0c164e0d655df3448764de40ccad7b1, type: 3}
   endingVideoDelay: 1.5
   endingVideoVolume: 1
   endingSkipKey: 98
-  tutorialCompletionVideoClip: {fileID: 32900000, guid: a005745852c8b2b49ad10c6acd782757,
+  tutorialCompletionVideoClip: {fileID: 32900000, guid: f521410da55cf1f449ed3a213428a40d,
     type: 3}
   tutorialCompletionVideoVolume: 1
-  phaseOneToPhaseTwoVideoClip: {fileID: 32900000, guid: 183a55fd24397424197e9b655f0a975a,
+  phaseOneToPhaseTwoVideoClip: {fileID: 32900000, guid: 6f8994432cf2f294f82b6f7f9837e565,
     type: 3}
   phaseOneToPhaseTwoVideoVolume: 1
   phaseOneToPhaseTwoSkipCheatKey: 54
