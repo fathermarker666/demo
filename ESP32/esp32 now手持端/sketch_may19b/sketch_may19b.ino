@@ -39,8 +39,8 @@ constexpr uint8_t kUltrasonicEchoPin = 18;
 constexpr uint32_t kUltrasonicPulseTimeoutUs = 5000;
 constexpr float kUltrasonicMaxDistanceCm = 80.0f;
 
-constexpr uint8_t kLeftStickXPin = 32;
-constexpr uint8_t kLeftStickYPin = 33;
+constexpr uint8_t kLeftStickXPin = 33;
+constexpr uint8_t kLeftStickYPin = 32;
 constexpr uint8_t kRightStickXPin = 34;
 constexpr uint8_t kRightStickYPin = 35;
 constexpr uint16_t kAnalogMax = 4095;
