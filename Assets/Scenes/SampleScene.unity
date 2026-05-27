@@ -870,7 +870,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 8da5a6e982fb2444cbb2c9cf54d75c2e, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7fb4bbb4b354f2340bbdc41f86e7fd23, type: 3}
   m_Type: 0
   m_PreserveAspect: 1
   m_FillCenter: 1
@@ -4188,7 +4188,7 @@ MonoBehaviour:
   controlsButton: {fileID: 306734294}
   quitButton: {fileID: 1434150134}
   closeControlsButton: {fileID: 180401994}
-  controlsSprite: {fileID: 21300000, guid: 8da5a6e982fb2444cbb2c9cf54d75c2e, type: 3}
+  controlsSprite: {fileID: 21300000, guid: 7fb4bbb4b354f2340bbdc41f86e7fd23, type: 3}
   preserveControlsImageAspect: 1
   homepageBackgroundSprite: {fileID: 0}
   preserveHomepageBackgroundAspect: 1
@@ -56462,7 +56462,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   arcadeAccentFont: {fileID: 12800000, guid: bdf624ebd8599fc46806c5d3d064bba7, type: 3}
-  controlsOverlaySprite: {fileID: 21300000, guid: 8da5a6e982fb2444cbb2c9cf54d75c2e,
+  controlsOverlaySprite: {fileID: 21300000, guid: 7fb4bbb4b354f2340bbdc41f86e7fd23,
     type: 3}
   actionClickClip: {fileID: 0}
   actionClickVolume: 1
